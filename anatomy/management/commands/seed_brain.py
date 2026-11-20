@@ -1,625 +1,3348 @@
+"""
+seed_brain.py - fills the BrainPart table (235 brain parts). Data + loader in one file.
 
-from django.core.management.base import BaseCommand
-from anatomy.models import BrainPart
+Works either way:
+
+  A) As a Django command (file at  anatomy/management/commands/seed_brain.py):
+         python manage.py seed_brain
+         python manage.py seed_brain --reset
+
+  B) As a plain script (file next to manage.py):
+         python seed_brain.py
+         python seed_brain.py --reset
+
+--reset deletes all BrainPart rows first. Without it the script is safe to re-run.
+"""
+import os
+import sys
+
+SETTINGS_MODULE = "config.settings"   # only used in mode B
+APP_LABEL = "anatomy"                 # app that contains the BrainPart model
+
+# mesh_name = exact GLB node name without the .l / .r suffix
+DATA = [{'name': 'Angular gyrus',
+  'slug': 'angular-gyrus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Posterior part of the inferior parietal lobule, at the junction of the parietal, temporal and '
+              'occipital lobes, capping the end of the superior temporal sulcus.',
+  'function': 'Integrates visual, auditory and spatial information for reading, number processing, semantic '
+              'retrieval and attention reorienting; a hub of the default-mode network.',
+  'damage_effects': 'Left-sided damage can cause Gerstmann syndrome (agraphia, acalculia, finger agnosia, '
+                    'left-right confusion) and alexia with agraphia; right-sided damage contributes to '
+                    'spatial neglect.',
+  'fact': 'It is Brodmann area 39 and is unusually large in humans compared with other primates.',
+  'mesh_name': 'Angular gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 10},
+ {'name': 'Anterior occipital sulcus',
+  'slug': 'anterior-occipital-sulcus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Lateral surface near the temporo-occipital junction, just in front of the occipital pole '
+              'region and close to the preoccipital notch.',
+  'function': 'Acts as a landmark separating the lateral occipital cortex from the posterior temporal '
+              'cortex; the neighbouring cortex supports visual motion and object processing.',
+  'damage_effects': 'Isolated damage is uncommon; lesions in this region can impair motion perception or '
+                    'object recognition because of adjacent visual-association cortex.',
+  'fact': 'It is one of the sulci used to define the boundary between the temporal and occipital lobes, '
+          'which have no sharp external border.',
+  'mesh_name': 'Anterior occipital sulcus*',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 20},
+ {'name': 'Calcarine sulcus',
+  'slug': 'calcarine-sulcus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Medial surface of the occipital lobe, running horizontally from the occipital pole toward the '
+              'parieto-occipital sulcus.',
+  'function': 'Its banks contain the primary visual cortex (V1, Brodmann area 17), which receives visual '
+              'input from the lateral geniculate nucleus via the optic radiation.',
+  'damage_effects': 'Damage causes contralateral homonymous hemianopia, often with macular sparing in '
+                    'posterior cerebral artery strokes; bilateral damage causes cortical blindness.',
+  'fact': 'Because V1 shows up as a white stripe of myelin (the stria of Gennari), it is also called the '
+          'striate cortex.',
+  'mesh_name': 'Calcarine sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 30},
+ {'name': 'Central sulcus',
+  'slug': 'central-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Runs obliquely across the lateral surface of each hemisphere from the dorsal midline down '
+              'toward the lateral fissure, separating the frontal and parietal lobes.',
+  'function': 'Divides the primary motor cortex (precentral gyrus) in front from the primary somatosensory '
+              'cortex (postcentral gyrus) behind.',
+  'damage_effects': 'A lesion centred on it affects both motor and sensory function on the opposite side of '
+                    'the body, producing weakness together with sensory loss.',
+  'fact': 'Also called the fissure of Rolando, it is one of the most reliable landmarks in neurosurgery and '
+          'brain imaging.',
+  'mesh_name': 'Central sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 40},
+ {'name': 'Cingulate gyrus (Posteroventral part)',
+  'slug': 'cingulate-gyrus-posteroventral-part',
+  'category': 'cortex',
+  'color': '#A855F7',
+  'location': 'Posterior end of the cingulate gyrus on the medial surface, curving around the splenium of '
+              'the corpus callosum (isthmus / retrosplenial region).',
+  'function': 'Links the posterior cingulate with the parahippocampal gyrus; involved in episodic memory, '
+              'spatial navigation and the default-mode network.',
+  'damage_effects': 'Damage to the retrosplenial region can cause topographical disorientation (getting lost '
+                    'in familiar places) and amnesia.',
+  'fact': "Retrosplenial cortex is one of the earliest regions to show reduced metabolism in Alzheimer's "
+          'disease.',
+  'mesh_name': 'Cingulate gyrus (Posteroventral part*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 50},
+ {'name': 'Cingulate gyrus and sulcus (Middle anterior part)',
+  'slug': 'cingulate-gyrus-and-sulcus-middle-anterior-part',
+  'category': 'cortex',
+  'color': '#A855F7',
+  'location': 'Medial frontal lobe, the anterior part of the middle cingulate cortex just above the body of '
+              'the corpus callosum.',
+  'function': 'Monitors conflict and errors, supports cognitive control, motivation and the affective side '
+              'of pain.',
+  'damage_effects': 'Lesions can cause reduced motivation and spontaneous behaviour (abulia), and in severe '
+                    'bilateral cases akinetic mutism.',
+  'fact': 'Cingulotomy, a small lesion here, has been used to treat intractable pain and severe '
+          'obsessive-compulsive disorder.',
+  'mesh_name': 'Cingulate gyrus and sulcus (Middle anterior part)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 60},
+ {'name': 'Cingulate gyrus and sulcus (Middle posterior part)',
+  'slug': 'cingulate-gyrus-and-sulcus-middle-posterior-part',
+  'category': 'cortex',
+  'color': '#A855F7',
+  'location': 'Medial surface above the posterior body of the corpus callosum, the posterior part of the '
+              'middle cingulate cortex.',
+  'function': 'Contributes to premotor and spatial processing, orienting attention and linking limbic '
+              'information to motor planning.',
+  'damage_effects': 'Damage may cause impaired spatial attention and motor initiation problems, usually '
+                    'together with neighbouring medial frontal or parietal injury.',
+  'fact': 'It contains a cingulate motor area that projects directly to the spinal cord.',
+  'mesh_name': 'Cingulate gyrus and sulcus (Middle posterior part)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 70},
+ {'name': 'Cingulate gyrus and sulcus (Posterior dorsal part)',
+  'slug': 'cingulate-gyrus-and-sulcus-posterior-dorsal-part',
+  'category': 'cortex',
+  'color': '#A855F7',
+  'location': 'Medial parietal region just above the splenium of the corpus callosum, the dorsal posterior '
+              'cingulate cortex, bordering the precuneus.',
+  'function': 'Core node of the default-mode network; supports self-referential thought, autobiographical '
+              'memory retrieval and attention shifting.',
+  'damage_effects': 'Damage can cause memory impairment and reduced awareness or orientation; reduced '
+                    "activity here is an early sign of Alzheimer's disease.",
+  'fact': 'It is among the most metabolically active regions of the brain at rest.',
+  'mesh_name': 'Cingulate gyrus and sulcus (Posterior dorsal part)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 80},
+ {'name': 'Cingulate sulcus (Marginal part)',
+  'slug': 'cingulate-sulcus-marginal-part',
+  'category': 'cortex',
+  'color': '#A855F7',
+  'location': 'Medial surface, the posterior upturned (marginal) end of the cingulate sulcus that runs up '
+              'behind the paracentral lobule to reach the dorsal margin of the hemisphere.',
+  'function': 'Landmark separating the paracentral lobule in front from the precuneus behind; it sits '
+              'between cortex involved in sensorimotor control and in spatial and self-referential '
+              'processing.',
+  'damage_effects': 'Rarely damaged alone; injury to the adjoining medial cortex can cause leg weakness or '
+                    'sensory loss (paracentral) or visuospatial problems (precuneus).',
+  'fact': 'On a medial MRI view this notch is a standard landmark for locating the central sulcus.',
+  'mesh_name': 'Cingulate sulcus (Marginal part*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 90},
+ {'name': 'Circular sulcus of insula',
+  'slug': 'circular-sulcus-of-insula',
+  'category': 'cortex',
+  'color': '#EC4899',
+  'location': 'Deep groove that encircles the insula, separating it from the frontal, parietal and temporal '
+              'opercula.',
+  'function': 'Defines the boundary of the insular cortex, which handles taste, interoception, pain, emotion '
+              'and speech articulation.',
+  'damage_effects': 'Not injured alone; lesions of the insular region cause taste disturbance, altered pain '
+                    'perception and, on the left, apraxia of speech.',
+  'fact': 'The insula is hidden under the opercula, so the circular sulcus is only visible when the lateral '
+          'fissure is opened.',
+  'mesh_name': 'Circular sulcus of insula',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 100},
+ {'name': 'Collateral sulcus',
+  'slug': 'collateral-sulcus',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Ventral surface of the temporal and occipital lobes, running between the fusiform gyrus '
+              '(laterally) and the parahippocampal and lingual gyri (medially).',
+  'function': 'Separates the fusiform gyrus from the parahippocampal gyrus; adjacent cortex supports scene '
+              'recognition and memory encoding.',
+  'damage_effects': 'Damage to the adjacent cortex can impair scene recognition and spatial memory; its '
+                    "depth and shape are studied as markers of temporal-lobe epilepsy and early Alzheimer's "
+                    'disease.',
+  'fact': 'Variations in collateral sulcus depth are linked to the size of the adjacent entorhinal cortex.',
+  'mesh_name': 'Collateral sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 110},
+ {'name': 'Cuneus',
+  'slug': 'cuneus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Medial occipital lobe, a wedge between the parieto-occipital sulcus and the calcarine sulcus.',
+  'function': 'Contains primary visual cortex (V1) and visual association areas that process the lower '
+              'visual field.',
+  'damage_effects': 'Damage causes a contralateral inferior quadrantanopia (loss of the lower visual field '
+                    'on the opposite side).',
+  'fact': "Its name comes from the Latin for 'wedge'.",
+  'mesh_name': 'Cuneus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 120},
+ {'name': 'Hippocampus',
+  'slug': 'hippocampus',
+  'category': 'cortex',
+  'color': '#A855F7',
+  'location': 'Medial temporal lobe, folded into the floor of the temporal horn of the lateral ventricle.',
+  'function': 'Forms new declarative (episodic) memories and supports spatial navigation by consolidating '
+              'information into long-term storage.',
+  'damage_effects': "Damage causes anterograde amnesia (inability to form new memories); Alzheimer's disease "
+                    'and temporal lobe epilepsy commonly involve it.',
+  'fact': 'Patient H.M., who lost both hippocampi in 1953, became the most studied case in memory research.',
+  'mesh_name': 'Hippocampus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 130},
+ {'name': 'Inferior frontal sulcus',
+  'slug': 'inferior-frontal-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Lateral frontal lobe, running horizontally between the middle and inferior frontal gyri.',
+  'function': 'Separates the middle from the inferior frontal gyrus, bordering areas for working memory and '
+              'language production.',
+  'damage_effects': 'Not damaged alone; neighbouring lesions cause executive dysfunction or non-fluent '
+                    'aphasia on the left.',
+  'fact': 'Its depth and continuity vary widely between individuals.',
+  'mesh_name': 'Inferior frontal sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 140},
+ {'name': 'Inferior occipital gyrus and sulcus',
+  'slug': 'inferior-occipital-gyrus-and-sulcus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Inferior part of the lateral occipital lobe, extending toward the occipital pole.',
+  'function': 'Supports mid-level visual processing including face and object features; contains the '
+              'occipital face area.',
+  'damage_effects': 'Damage can contribute to prosopagnosia (difficulty recognising faces) and visual object '
+                    'agnosia.',
+  'fact': 'The occipital face area is thought to be an early stage of the face-processing network.',
+  'mesh_name': 'Inferior occipital gyrus and sulcus*',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 150},
+ {'name': 'Inferior temporal gyrus',
+  'slug': 'inferior-temporal-gyrus',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Lowest gyrus on the lateral surface of the temporal lobe, continuing onto the inferior '
+              'surface.',
+  'function': 'Late ventral visual stream: recognises complex objects, faces and words, and contributes to '
+              'visual memory.',
+  'damage_effects': 'Damage can cause visual agnosia, prosopagnosia and impaired object naming.',
+  'fact': 'Neurons here respond to highly specific stimuli such as faces and hands.',
+  'mesh_name': 'Inferior temporal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 160},
+ {'name': 'Inferior temporal sulcus',
+  'slug': 'inferior-temporal-sulcus',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Lateral temporal lobe, between the middle and inferior temporal gyri.',
+  'function': 'Separates the middle temporal gyrus from the inferior temporal gyrus, two regions used in '
+              'semantics and visual object recognition.',
+  'damage_effects': 'Not damaged alone; surrounding injury causes naming problems or visual agnosia.',
+  'fact': 'It is often broken into segments, making it hard to trace on some brains.',
+  'mesh_name': 'Inferior temporal sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 170},
+ {'name': 'Insula (Subcentral gyrus and ant. and post. sulci)',
+  'slug': 'insula-subcentral-gyrus-and-ant-and-post-sulci',
+  'category': 'cortex',
+  'color': '#EC4899',
+  'location': 'Opercular surface at the lower end of the central sulcus, bridging the lowest parts of the '
+              'precentral and postcentral gyri above the insula.',
+  'function': 'Part of the orofacial sensorimotor area that controls and senses movements of the mouth, '
+              'tongue and larynx used in speech and swallowing.',
+  'damage_effects': 'Damage can impair articulation, oral sensation and swallowing, and may contribute to '
+                    'apraxia of speech when the left side is involved.',
+  'fact': "It is sometimes called the 'subcentral' gyrus because it lies directly below the central sulcus.",
+  'mesh_name': 'Insula (Subcentral gyrus and ant. and post. sulci*)',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 180},
+ {'name': 'Intraparietal sulcus',
+  'slug': 'intraparietal-sulcus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Lateral parietal lobe, running horizontally and dividing the superior parietal lobule from '
+              'the inferior parietal lobule.',
+  'function': 'Supports spatial attention, eye-hand coordination, saccadic eye movements and number '
+              'processing.',
+  'damage_effects': 'Damage can cause spatial neglect (right side), optic ataxia and impaired number sense.',
+  'fact': 'Neurons here encode numerical quantity, and the sulcus is central to studies of number cognition.',
+  'mesh_name': 'Intraparietal sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 190},
+ {'name': 'Lat Fis-ant-Horizont',
+  'slug': 'lat-fis-ant-horizont',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Frontal lobe, the anterior horizontal ramus of the lateral fissure that runs forward from the '
+              'main stem into the inferior frontal gyrus.',
+  'function': 'Separates the orbital part from the triangular part of the inferior frontal gyrus.',
+  'damage_effects': 'Not damaged alone; involvement of the adjacent inferior frontal gyrus in the left '
+                    'hemisphere is associated with non-fluent (Broca) aphasia.',
+  'fact': "The two anterior rami of the lateral fissure form the characteristic 'Y' shape that outlines the "
+          'pars triangularis.',
+  'mesh_name': 'Lat_Fis-ant-Horizont',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 200},
+ {'name': 'Lat Fis-ant-Vertical',
+  'slug': 'lat-fis-ant-vertical',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Frontal lobe, the anterior ascending (vertical) ramus of the lateral fissure.',
+  'function': 'Separates the triangular part from the opercular part of the inferior frontal gyrus, which '
+              "together form Broca's area.",
+  'damage_effects': 'Not damaged alone; injury to the neighbouring left inferior frontal gyrus causes '
+                    'expressive (non-fluent) aphasia.',
+  'fact': "Its position is used by neurosurgeons to locate Broca's area.",
+  'mesh_name': 'Lat_Fis-ant-Vertical',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 210},
+ {'name': 'Lat Fis-post',
+  'slug': 'lat-fis-post',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Posterior ramus of the lateral fissure, running backward between the temporal lobe and the '
+              'parietal operculum toward the supramarginal gyrus.',
+  'function': 'Forms the boundary between the superior temporal and the inferior parietal cortex and houses '
+              'the auditory and language cortex along its floor.',
+  'damage_effects': "Not damaged alone; lesions around it, especially on the left, cause Wernicke's or "
+                    'conduction aphasia.',
+  'fact': 'The posterior end often curls upward into the supramarginal gyrus and is asymmetric between the '
+          'left and right hemispheres.',
+  'mesh_name': 'Lat_Fis-post',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 220},
+ {'name': 'Lateral occipital gyrus (Middle occipital gyrus)',
+  'slug': 'lateral-occipital-gyrus-middle-occipital-gyrus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Lateral surface of the occipital lobe between the superior and inferior occipital gyri.',
+  'function': 'Includes the lateral occipital complex, which recognises object shapes; also contributes to '
+              'visual motion processing near area MT/V5.',
+  'damage_effects': 'Damage can cause visual object agnosia and, with adjacent damage, impaired motion '
+                    'perception.',
+  'fact': 'The lateral occipital complex responds to object shape regardless of whether the object is '
+          'defined by edges, motion or texture.',
+  'mesh_name': 'Lateral occipital gyrus (Middle occipital gyrus*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 230},
+ {'name': 'Lateral occipitotemporal gyrus',
+  'slug': 'lateral-occipitotemporal-gyrus',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Ventral surface of the temporal and occipital lobes between the collateral sulcus and the '
+              'occipitotemporal sulcus (the fusiform gyrus).',
+  'function': 'Contains the fusiform face area and the visual word form area; processes faces, words, colour '
+              'and object categories.',
+  'damage_effects': 'Right-sided or bilateral damage causes prosopagnosia (face blindness); left-sided '
+                    'damage can cause pure alexia and colour-recognition deficits.',
+  'fact': "It is commonly called the fusiform gyrus, after the Latin for 'spindle'.",
+  'mesh_name': 'Lateral occipitotemporal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 240},
+ {'name': 'Lingual gyrus',
+  'slug': 'lingual-gyrus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Medial occipital lobe below the calcarine sulcus, extending forward to the parahippocampal '
+              'gyrus.',
+  'function': 'Processes the upper visual field and takes part in colour processing, visual memory and word '
+              'recognition.',
+  'damage_effects': 'Damage can cause contralateral superior quadrantanopia, achromatopsia (loss of colour '
+                    'vision) or alexia.',
+  'fact': 'Its name comes from its tongue-like shape.',
+  'mesh_name': 'Lingual gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 250},
+ {'name': 'Lunate sulcus',
+  'slug': 'lunate-sulcus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Lateral occipital lobe, a small inconsistent curved sulcus near the occipital pole.',
+  'function': 'In apes it marks the front edge of the primary visual cortex; in humans it is a variable '
+              'landmark near the border of early visual areas.',
+  'damage_effects': 'Rarely relevant on its own; damage to adjacent visual cortex causes contralateral '
+                    'visual field defects.',
+  'fact': 'Its shifting position between species has been used to study how the human visual cortex changed '
+          'during evolution.',
+  'mesh_name': 'Lunate sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 260},
+ {'name': 'Medial occipitotemporal gyrus (Parahippocampal)',
+  'slug': 'medial-occipitotemporal-gyrus-parahippocampal',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Ventromedial temporal lobe, running beneath the hippocampus between the collateral sulcus and '
+              'the hippocampal sulcus (parahippocampal gyrus).',
+  'function': 'Provides the main route into the hippocampus through the entorhinal cortex; supports memory '
+              'encoding, scene recognition and spatial context.',
+  'damage_effects': 'Damage causes memory loss and difficulty recognising places; it is affected early in '
+                    "Alzheimer's disease.",
+  'fact': 'The parahippocampal place area responds strongly to pictures of scenes and buildings.',
+  'mesh_name': 'Medial occipitotemporal gyrus (Parahippocampal*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 270},
+ {'name': 'Middle frontal gyrus',
+  'slug': 'middle-frontal-gyrus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Middle of the three horizontal gyri on the lateral surface of the frontal lobe, between the '
+              'superior and inferior frontal sulci.',
+  'function': 'Home of the dorsolateral prefrontal cortex: working memory, planning, attention and cognitive '
+              'flexibility.',
+  'damage_effects': 'Damage causes executive dysfunction: poor planning, impaired working memory, '
+                    'perseveration and difficulty shifting strategy.',
+  'fact': 'It is one of the last brain regions to fully mature, continuing to develop into the mid-twenties.',
+  'mesh_name': 'Middle frontal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 280},
+ {'name': 'Middle temporal gyrus',
+  'slug': 'middle-temporal-gyrus',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Middle gyrus of the lateral temporal lobe, between the superior and inferior temporal sulci.',
+  'function': 'Supports word meaning, semantic memory, language comprehension and, at its posterior end, '
+              'visual motion processing (area MT/V5).',
+  'damage_effects': 'Left-sided damage impairs word comprehension and naming; posterior damage can cause '
+                    'akinetopsia (motion blindness).',
+  'fact': 'Area MT/V5 sits near its posterior end and was among the first visual areas found to specialise '
+          'in motion.',
+  'mesh_name': 'Middle temporal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 290},
+ {'name': 'Occipital pole',
+  'slug': 'occipital-pole',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Posterior tip of the occipital lobe.',
+  'function': 'Receives central (macular) vision and is the site of the foveal representation in primary '
+              'visual cortex.',
+  'damage_effects': 'Damage causes contralateral central scotomas (blind spots in the centre of vision).',
+  'fact': 'Although small, it dedicates a disproportionately large cortical area to the fovea, the sharpest '
+          'part of vision.',
+  'mesh_name': 'Occipital pole',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 300},
+ {'name': 'Occipitotemporal sulcus (Lateral part)',
+  'slug': 'occipitotemporal-sulcus-lateral-part',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Inferior surface of the temporal-occipital cortex, lateral to the fusiform gyrus.',
+  'function': 'Separates the fusiform gyrus from the inferior temporal gyrus and borders cortex used in '
+              'visual object and word recognition.',
+  'damage_effects': 'Rarely damaged alone; neighbouring injury can cause object agnosia or reading problems.',
+  'fact': 'Its depth correlates with how the fusiform face area is positioned in different people.',
+  'mesh_name': 'Occipitotemporal sulcus (Lateral part*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 310},
+ {'name': 'Olfactory sulcus',
+  'slug': 'olfactory-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Orbital surface of the frontal lobe, running front to back near the midline between the gyrus '
+              'rectus and the orbital gyri.',
+  'function': 'Houses the olfactory bulb and olfactory tract, which carry smell information to the brain.',
+  'damage_effects': 'Damage or compression (e.g., by a tumour such as an olfactory groove meningioma) causes '
+                    'loss of smell (anosmia) on the same side.',
+  'fact': 'Olfactory sulcus depth measured on MRI is used as a marker of olfactory function in some '
+          'conditions.',
+  'mesh_name': 'Olfactory sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 320},
+ {'name': 'Opercular part of inferior frontal gyrus',
+  'slug': 'opercular-part-of-inferior-frontal-gyrus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Posterior part of the inferior frontal gyrus, between the anterior ascending ramus of the '
+              'lateral fissure and the inferior precentral sulcus (Brodmann area 44).',
+  'function': "Posterior part of Broca's area: motor planning of speech, syntax and speech articulation; "
+              'also supports action observation.',
+  'damage_effects': "Left-sided damage causes non-fluent (Broca's) aphasia with effortful, halting speech "
+                    'and relatively preserved comprehension; apraxia of speech can also occur.',
+  'fact': "Named from the Latin operculum ('lid'), because it covers part of the insula.",
+  'mesh_name': 'Opercular part of inferior frontal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 330},
+ {'name': 'Orbital gyri',
+  'slug': 'orbital-gyri',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Inferior (orbital) surface of the frontal lobe, resting on the roof of the orbits.',
+  'function': 'Orbitofrontal cortex: evaluates rewards and punishments, integrates smell and taste, and '
+              'guides social behaviour and decision-making.',
+  'damage_effects': 'Damage can cause disinhibition, impulsivity, personality change and loss of smell '
+                    '(anosmia) if the olfactory tract is affected.',
+  'fact': 'Orbitofrontal damage is classically linked to the personality change seen in Phineas Gage.',
+  'mesh_name': 'Orbital gyri',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 340},
+ {'name': 'Orbital gyri (Frontomarginal gyrus and sulcus)',
+  'slug': 'orbital-gyri-frontomarginal-gyrus-and-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Anterior margin of the orbital surface of the frontal lobe, near the frontal pole.',
+  'function': 'Part of the orbitofrontal and frontopolar cortex; supports value-based decisions and '
+              'evaluating rewards.',
+  'damage_effects': 'Damage can cause impulsivity, poor social judgement and impaired decision-making.',
+  'fact': 'Frontopolar regions are much larger in humans than in other primates.',
+  'mesh_name': 'Orbital gyri (Frontomarginal gyrus and sulcus*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 350},
+ {'name': 'Orbital part of inferior frontal gyrus',
+  'slug': 'orbital-part-of-inferior-frontal-gyrus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Lowest anterior part of the inferior frontal gyrus, in front of the anterior horizontal ramus '
+              'of the lateral fissure (Brodmann area 47).',
+  'function': 'Supports semantic processing and selecting among competing word meanings; also involved in '
+              'emotional and social language processing.',
+  'damage_effects': 'Damage can cause difficulty retrieving appropriate words and processing meaning; '
+                    "effects are usually milder than lesions to Broca's area.",
+  'fact': 'It is sometimes called the pars orbitalis.',
+  'mesh_name': 'Orbital part of  inferior frontal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 360},
+ {'name': 'Orbital sulci (H-shaped orbital sulci)',
+  'slug': 'orbital-sulci-h-shaped-orbital-sulci',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': "Orbital surface of the frontal lobe, forming an 'H' that divides the cortex into medial, "
+              'anterior, lateral and posterior orbital gyri.',
+  'function': 'Folds that organise the orbitofrontal cortex, which integrates smell, taste and reward value.',
+  'damage_effects': 'Not damaged alone; orbitofrontal injury causes disinhibition, impaired social behaviour '
+                    'and loss of smell.',
+  'fact': 'The shape of the H-sulcus varies between people and is used to classify orbitofrontal types.',
+  'mesh_name': 'Orbital sulci (H-shaped orbital sulci*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 370},
+ {'name': 'Orbital sulci (Lateral Orbital sulcus)',
+  'slug': 'orbital-sulci-lateral-orbital-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Lateral part of the orbital surface of the frontal lobe, next to the lateral edge of the '
+              'orbital gyri.',
+  'function': 'Marks the lateral boundary of the orbitofrontal cortex, which links sensory information to '
+              'reward and decisions.',
+  'damage_effects': 'Isolated damage is unusual; orbitofrontal lesions cause personality change and impaired '
+                    'judgement.',
+  'fact': 'It separates orbitofrontal cortex from the inferior frontal gyrus.',
+  'mesh_name': 'Orbital sulci (Lateral Orbital sulcus*)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 380},
+ {'name': 'Paracentral gyrus and sulcus',
+  'slug': 'paracentral-gyrus-and-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Medial surface at the top of the hemisphere, wrapping around the end of the central sulcus.',
+  'function': 'Controls movement and sensation of the opposite leg and foot, and bladder and bowel control.',
+  'damage_effects': 'Damage (e.g., anterior cerebral artery stroke) causes contralateral leg weakness and '
+                    'sensory loss, and may cause urinary incontinence.',
+  'fact': "It is the 'foot' region of the motor and sensory homunculus.",
+  'mesh_name': 'Paracentral gyrus and sulcus*',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 390},
+ {'name': 'Paracentral sulcus',
+  'slug': 'paracentral-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Medial surface of the frontal lobe, in front of the paracentral lobule, usually a branch of '
+              'the cingulate sulcus.',
+  'function': 'Defines the front edge of the paracentral lobule, which controls leg movement and sensation.',
+  'damage_effects': 'Not damaged alone; adjacent injury causes contralateral leg weakness.',
+  'fact': 'It is a handy landmark for finding the central sulcus on the medial surface.',
+  'mesh_name': 'Paracentral sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 400},
+ {'name': 'Parieto-occipital sulcus',
+  'slug': 'parieto-occipital-sulcus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Medial surface, running from the dorsal margin down to meet the calcarine sulcus.',
+  'function': 'Separates the cuneus (occipital) from the precuneus (parietal); it marks the boundary between '
+              'occipital and parietal lobes.',
+  'damage_effects': 'Not damaged alone; surrounding injury can cause visual field defects or parietal '
+                    'symptoms such as visual neglect.',
+  'fact': "Together with the calcarine sulcus it forms a 'Y' on the medial surface.",
+  'mesh_name': 'Parieto-occipital sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 410},
+ {'name': 'Postcentral gyrus',
+  'slug': 'postcentral-gyrus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Parietal lobe, the gyrus just behind the central sulcus.',
+  'function': 'Primary somatosensory cortex (Brodmann areas 3, 1, 2): receives touch, pressure, vibration, '
+              'temperature and proprioception from the opposite side of the body.',
+  'damage_effects': 'Damage causes contralateral loss of touch and position sense, astereognosis and '
+                    'impaired two-point discrimination.',
+  'fact': 'Body parts are mapped as a sensory homunculus, with the hands and lips taking up the most cortex.',
+  'mesh_name': 'Postcentral gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 420},
+ {'name': 'Postcentral sulcus',
+  'slug': 'postcentral-sulcus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Lateral parietal lobe, behind the postcentral gyrus.',
+  'function': 'Separates the postcentral gyrus (somatosensory cortex) from the superior and inferior '
+              'parietal lobules.',
+  'damage_effects': 'Not damaged alone; surrounding lesions cause contralateral sensory loss and '
+                    'sensory-integration deficits.',
+  'fact': 'It often joins the intraparietal sulcus to form a continuous groove.',
+  'mesh_name': 'Postcentral sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 430},
+ {'name': 'Posterior transverse collateral sulcus',
+  'slug': 'posterior-transverse-collateral-sulcus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Ventromedial surface of the occipital lobe, at the posterior end of the collateral sulcus '
+              'near the lingual and fusiform gyri.',
+  'function': 'Folds the ventral occipitotemporal cortex and marks the border between early visual areas and '
+              'higher-order ventral-stream cortex used for scene and object processing.',
+  'damage_effects': 'Rarely injured in isolation; lesions of the surrounding ventral occipitotemporal cortex '
+                    'can cause visual-recognition problems such as difficulty recognising places or objects.',
+  'fact': 'Sulci like this one increase cortical surface area without increasing skull size.',
+  'mesh_name': 'Posterior transverse collateral sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 440},
+ {'name': 'Precentral gyrus',
+  'slug': 'precentral-gyrus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Frontal lobe, the gyrus just in front of the central sulcus.',
+  'function': 'Primary motor cortex (Brodmann area 4): sends voluntary motor commands via the corticospinal '
+              'and corticobulbar tracts to muscles on the opposite side.',
+  'damage_effects': 'Damage causes contralateral weakness or paralysis; the pattern depends on which part of '
+                    'the motor map is affected.',
+  'fact': "Wilder Penfield mapped the motor homunculus here by stimulating patients' cortex during surgery.",
+  'mesh_name': 'Precentral gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 450},
+ {'name': 'Precentral sulcus (inferior part)',
+  'slug': 'precentral-sulcus-inferior-part',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Lateral frontal lobe, the lower part of the sulcus in front of the precentral gyrus.',
+  'function': 'Separates the precentral gyrus from the inferior frontal gyrus, near cortex for speech motor '
+              'planning.',
+  'damage_effects': 'Not damaged alone; adjacent lesions can produce motor speech problems.',
+  'fact': 'Its upper and lower parts are sometimes continuous and sometimes separate, depending on the '
+          'individual.',
+  'mesh_name': 'Precentral sulcus (inferior part)*',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 460},
+ {'name': 'Precentral sulcus (Superior part)',
+  'slug': 'precentral-sulcus-superior-part',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Lateral frontal lobe, the upper part of the sulcus in front of the precentral gyrus.',
+  'function': 'Contains the frontal eye field at its junction with the superior frontal sulcus, which '
+              'controls voluntary gaze.',
+  'damage_effects': 'Damage near the frontal eye field causes contralateral gaze palsy and difficulty making '
+                    'voluntary saccades; the eyes deviate toward the lesion.',
+  'fact': "The 'frontal eye field' lies at the intersection of this sulcus and the superior frontal sulcus.",
+  'mesh_name': 'Precentral sulcus (Superior part)*',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 470},
+ {'name': 'Precuneus',
+  'slug': 'precuneus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Medial parietal lobe, between the paracentral lobule in front and the parieto-occipital '
+              'sulcus behind, above the posterior cingulate.',
+  'function': 'Supports visuospatial imagery, episodic memory retrieval, self-reflection and '
+              'perspective-taking; a major default-mode network hub.',
+  'damage_effects': 'Damage can cause visuospatial problems, impaired recall and disorientation; reduced '
+                    "precuneus activity is an early sign of Alzheimer's disease.",
+  'fact': 'It is one of the most densely connected hubs of the cortex.',
+  'mesh_name': 'Precuneus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 480},
+ {'name': 'Straight gyrus (Gyrus rectus)',
+  'slug': 'straight-gyrus-gyrus-rectus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Inferior surface of the frontal lobe along the medial edge, next to the interhemispheric '
+              'fissure and medial to the olfactory sulcus.',
+  'function': 'Part of the ventromedial prefrontal cortex: emotion regulation, social cognition and '
+              'decision-making.',
+  'damage_effects': 'Damage can cause apathy, disinhibition and personality change, and can occur in '
+                    'anterior communicating artery aneurysm rupture.',
+  'fact': "Its Latin name, gyrus rectus, simply means 'straight gyrus'.",
+  'mesh_name': 'Straight gyrus (Gyrus rectus)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 490},
+ {'name': 'Subparietal sulcus',
+  'slug': 'subparietal-sulcus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Medial parietal lobe, a horizontal sulcus above the posterior cingulate and below the '
+              'precuneus.',
+  'function': 'Separates the precuneus from the posterior cingulate cortex.',
+  'damage_effects': 'Not damaged alone; neighbouring lesions impair memory and spatial processing.',
+  'fact': 'It is commonly an extension of the cingulate sulcus.',
+  'mesh_name': 'Subparietal sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 500},
+ {'name': 'Sulcus interm prim-Jensen',
+  'slug': 'sulcus-interm-prim-jensen',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Inferior parietal lobule, the sulcus intermedius primus of Jensen, a short vertical branch of '
+              'the intraparietal sulcus.',
+  'function': 'Separates the supramarginal gyrus from the angular gyrus.',
+  'damage_effects': 'Not damaged alone; surrounding injury causes language and spatial processing problems.',
+  'fact': 'Named after the 19th-century anatomist who described it; its presence is a variable anatomical '
+          'feature.',
+  'mesh_name': 'Sulcus interm_prim-Jensen',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 510},
+ {'name': 'Superior frontal gyrus',
+  'slug': 'superior-frontal-gyrus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Uppermost gyrus on the lateral and medial surface of the frontal lobe, above the superior '
+              'frontal sulcus.',
+  'function': 'Supports self-awareness, working memory and motor planning; the medial part contains the '
+              'supplementary motor area.',
+  'damage_effects': 'Damage can cause impaired motor planning (supplementary motor area syndrome with '
+                    'transient speech and movement initiation difficulty) and executive dysfunction.',
+  'fact': 'The supplementary motor area activates even when people only imagine a movement.',
+  'mesh_name': 'Superior frontal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 520},
+ {'name': 'Superior frontal sulcus',
+  'slug': 'superior-frontal-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Lateral surface of the frontal lobe, running front to back and separating the superior and '
+              'middle frontal gyri.',
+  'function': 'Landmark separating the superior and middle frontal gyri; houses the frontal eye field at its '
+              'junction with the precentral sulcus.',
+  'damage_effects': 'Not damaged alone; surrounding injury affects executive function and voluntary gaze.',
+  'fact': 'Together with the precentral sulcus it frames the area where the frontal eye field is found.',
+  'mesh_name': 'Superior frontal sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 530},
+ {'name': 'Superior occipital gyri',
+  'slug': 'superior-occipital-gyri',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Dorsal part of the occipital lobe, along the upper margin of the lateral surface.',
+  'function': 'Dorsal visual stream: spatial vision, depth and guiding reach and attention.',
+  'damage_effects': 'Damage can cause problems with visual-spatial perception, optic ataxia and '
+                    'contralateral lower-field defects.',
+  'fact': "It is part of the 'where/how' pathway that guides action toward objects.",
+  'mesh_name': 'Superior occipital gyri',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 540},
+ {'name': 'Superior parietal lobule',
+  'slug': 'superior-parietal-lobule',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Parietal lobe, above the intraparietal sulcus (Brodmann areas 5 and 7).',
+  'function': 'Integrates somatosensory and visual information for spatial awareness, reaching and body '
+              'position.',
+  'damage_effects': 'Damage can cause contralateral astereognosis, optic ataxia and impaired sense of body '
+                    'position and space.',
+  'fact': 'Patients with right-sided damage may ignore the left half of the world (neglect).',
+  'mesh_name': 'Superior parietal lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 550},
+ {'name': 'Superior temporal gyrus (Lateral part)',
+  'slug': 'superior-temporal-gyrus-lateral-part',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Uppermost gyrus on the lateral surface of the temporal lobe, below the lateral fissure.',
+  'function': "Auditory association cortex and, in the left posterior part, Wernicke's area for "
+              'understanding speech; also processes voices and social cues.',
+  'damage_effects': "Left-sided damage causes Wernicke's (fluent but meaningless) aphasia; bilateral damage "
+                    'can cause cortical deafness.',
+  'fact': 'Wernicke described the language comprehension area here in 1874.',
+  'mesh_name': 'Superior temporal gyrus (Lateral part)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 560},
+ {'name': 'Superior temporal sulcus',
+  'slug': 'superior-temporal-sulcus',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Lateral temporal lobe, a long groove between the superior and middle temporal gyri.',
+  'function': 'Supports perception of biological motion, gaze direction, voices, speech and social cues; '
+              'integrates auditory and visual information.',
+  'damage_effects': 'Damage can impair recognition of facial expressions, gaze direction and speech '
+                    'comprehension; abnormal function is implicated in autism research.',
+  'fact': 'It is one of the deepest sulci and hides large amounts of cortex inside its folds.',
+  'mesh_name': 'Superior temporal sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 570},
+ {'name': 'Supramarginal gyrus',
+  'slug': 'supramarginal-gyrus',
+  'category': 'cortex',
+  'color': '#22C55E',
+  'location': 'Inferior parietal lobule, arching over the posterior end of the lateral fissure (Brodmann '
+              'area 40).',
+  'function': 'Involved in phonological processing, tactile perception and the planning of skilled actions.',
+  'damage_effects': 'Left-sided damage causes conduction aphasia (poor repetition) or ideomotor apraxia; '
+                    'right-sided damage contributes to neglect.',
+  'fact': "Its name comes from the Latin for 'above the margin'.",
+  'mesh_name': 'Supramarginal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 580},
+ {'name': 'Temporal plane',
+  'slug': 'temporal-plane',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Upper surface of the temporal lobe buried inside the lateral fissure, behind and in front of '
+              "Heschl's gyrus (planum temporale and planum polare).",
+  'function': 'The planum temporale supports language processing and auditory integration; it is typically '
+              'larger on the left side.',
+  'damage_effects': 'Damage can contribute to receptive language problems and auditory-processing '
+                    'difficulties.',
+  'fact': 'Left-right asymmetry of the planum temporale is one of the best-known structural brain '
+          'asymmetries.',
+  'mesh_name': 'Temporal plane',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 590},
+ {'name': 'Temporal pole',
+  'slug': 'temporal-pole',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': 'Anterior tip of the temporal lobe (Brodmann area 38).',
+  'function': "Links semantic knowledge, emotion and social memory; anterior temporal lobe 'hub' for "
+              'concepts and people.',
+  'damage_effects': 'Damage causes semantic dementia (loss of word and object meaning), problems recognising '
+                    'familiar people, and emotional changes.',
+  'fact': 'Anterior temporal lobectomy is a common treatment for drug-resistant epilepsy.',
+  'mesh_name': 'Temporal pole',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 600},
+ {'name': 'Transverse frontopolar gyrus and sulcus',
+  'slug': 'transverse-frontopolar-gyrus-and-sulcus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Frontal pole, the most anterior part of the frontal lobe (Brodmann area 10).',
+  'function': 'Supports prospective memory, multitasking, abstract reasoning and the evaluation of future '
+              'plans.',
+  'damage_effects': 'Damage can cause difficulty planning, multitasking and managing long-term goals.',
+  'fact': 'The frontal pole is proportionally much larger in humans than in other apes.',
+  'mesh_name': 'Transverse frontopolar gyrus and sulcus*',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 610},
+ {'name': 'Transverse occipital sulcus',
+  'slug': 'transverse-occipital-sulcus',
+  'category': 'cortex',
+  'color': '#EF4444',
+  'location': 'Dorsal occipital lobe, running transversely near the border with the parietal lobe.',
+  'function': 'Marks the lower border of the superior occipital cortex; adjacent cortex is involved in scene '
+              'and spatial processing.',
+  'damage_effects': 'Not damaged alone; nearby injury can impair visuospatial perception.',
+  'fact': 'Its extent varies greatly, and scene-selective cortex (transverse occipital sulcus area) sits '
+          'near it.',
+  'mesh_name': 'Transverse occipital sulcus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 620},
+ {'name': 'Transverse temporal gyri',
+  'slug': 'transverse-temporal-gyri',
+  'category': 'cortex',
+  'color': '#F59E0B',
+  'location': "Upper surface of the temporal lobe inside the lateral fissure, running obliquely (Heschl's "
+              'gyri).',
+  'function': 'Primary auditory cortex (Brodmann areas 41 and 42): first cortical stage of sound processing, '
+              'organised by pitch.',
+  'damage_effects': 'Unilateral damage mildly impairs hearing and sound localisation; bilateral damage can '
+                    'cause cortical deafness.',
+  'fact': 'Named after Richard Heschl, who described it in 1878.',
+  'mesh_name': 'Transverse temporal gyri',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 630},
+ {'name': 'Triangular part of inferior frontal gyrus',
+  'slug': 'triangular-part-of-inferior-frontal-gyrus',
+  'category': 'cortex',
+  'color': '#3B82F6',
+  'location': 'Middle section of the inferior frontal gyrus between the anterior horizontal and ascending '
+              'rami of the lateral fissure (Brodmann area 45).',
+  'function': "Part of Broca's area: language production, semantic selection and sentence structure.",
+  'damage_effects': "Left-sided damage causes Broca's aphasia with non-fluent, effortful speech and "
+                    'comprehension of simple language preserved.',
+  'fact': 'Its name comes from its triangular shape.',
+  'mesh_name': 'Triangular part of inferior frontal gyrus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 640},
+ {'name': 'Anterior quadrangular lobule',
+  'slug': 'anterior-quadrangular-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Anterior lobe of the cerebellar hemisphere (lobule HIV–HV), in front of the primary fissure.',
+  'function': 'Part of the spinocerebellar region that coordinates voluntary movements of the arms and legs '
+              'using proprioceptive feedback.',
+  'damage_effects': 'Damage causes ipsilateral limb ataxia, with clumsy, poorly aimed movements and '
+                    'intention tremor.',
+  'fact': 'Its somatotopic map lets researchers see hand and foot movements represented in the cerebellum.',
+  'mesh_name': 'Anterior quadrangular lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 650},
+ {'name': 'Base of peduncle',
+  'slug': 'base-of-peduncle',
+  'category': 'structure',
+  'color': '#14B8A6',
+  'location': 'Base of the cerebellar peduncles where the middle peduncle joins the cerebellar hemisphere.',
+  'function': 'Conveys fibres between the brainstem and cerebellar hemisphere.',
+  'damage_effects': 'Damage can disrupt pontocerebellar input, causing ipsilateral ataxia and imbalance.',
+  'fact': "The peduncles are the cerebellum's only communication with the rest of the brain.",
+  'mesh_name': 'Base of peduncle',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 660},
+ {'name': 'Biventral lobule',
+  'slug': 'biventral-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Posterior-inferior cerebellar hemisphere, lobule HVIII, beside the tonsil and pyramis.',
+  'function': 'Supports coordination of limb movements and contributes to sensorimotor integration.',
+  'damage_effects': 'Damage can cause ipsilateral limb incoordination and balance problems.',
+  'fact': 'It is also known as the biventer lobule because it looks like a muscle with two bellies.',
+  'mesh_name': 'Biventral lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 670},
+ {'name': 'Central lobule',
+  'slug': 'central-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Anterior vermis (lobules II–III), just above the lingula, on the midline of the cerebellum.',
+  'function': 'Controls posture and gait of the legs and trunk through spinocerebellar input.',
+  'damage_effects': 'Vermian damage causes truncal ataxia and a wide-based, unsteady gait.',
+  'fact': 'Its wings extend laterally on both sides as the wing of the central lobule.',
+  'mesh_name': 'Central lobule',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 680},
+ {'name': 'Culmen',
+  'slug': 'culmen',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Superior vermis (lobules IV–V) of the anterior cerebellum, the highest part of the vermis.',
+  'function': 'Helps coordinate trunk and limb movement and posture, receiving spinocerebellar input.',
+  'damage_effects': 'Damage, as in alcohol-related cerebellar degeneration, causes gait and leg ataxia.',
+  'fact': 'Anterior vermis degeneration is the classic pattern of alcoholic cerebellar atrophy.',
+  'mesh_name': 'Culmen',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 690},
+ {'name': 'Declive',
+  'slug': 'declive',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Posterior vermis (lobule VI), behind the primary fissure on the superior surface.',
+  'function': 'Supports smooth-pursuit and saccadic eye movements and may contribute to cognitive and '
+              'emotional regulation.',
+  'damage_effects': 'Damage can cause eye-movement abnormalities, gait ataxia and cognitive-affective '
+                    'changes (cerebellar cognitive affective syndrome).',
+  'fact': 'Together with the folium and tuber it forms the posterior vermis, linked to emotional processing.',
+  'mesh_name': 'Declive',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 700},
+ {'name': 'Flocculus',
+  'slug': 'flocculus',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Small lobe on the inferior-anterior surface of the cerebellum, next to the middle cerebellar '
+              'peduncle.',
+  'function': 'Part of the vestibulocerebellum: controls balance, the vestibulo-ocular reflex and smooth '
+              'pursuit eye movements.',
+  'damage_effects': 'Damage causes nystagmus, vertigo, poor gaze holding and impaired smooth pursuit.',
+  'fact': 'Along with the nodulus it forms the flocculonodular lobe, the oldest part of the cerebellum.',
+  'mesh_name': 'Flocculus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 710},
+ {'name': 'Folium of vermis',
+  'slug': 'folium-of-vermis',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Posterior vermis (lobule VII A), between the declive and the tuber.',
+  'function': 'Contributes to eye-movement control, attention and cognitive functions.',
+  'damage_effects': 'Damage can affect gaze control and cause cerebellar cognitive affective changes.',
+  'fact': "Folium means 'leaf', reflecting the thin folds of the cerebellar cortex.",
+  'mesh_name': 'Folium of vermis',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 720},
+ {'name': 'Gracile lobule',
+  'slug': 'gracile-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Posterior-inferior cerebellar hemisphere (lobule HVIIB), between the biventral lobule and the '
+              'inferior semilunar lobule.',
+  'function': 'Contributes to cerebellar processing of motor coordination and, through lateral connections, '
+              'aspects of cognition.',
+  'damage_effects': 'Damage can cause limb ataxia and mild cognitive or executive difficulties.',
+  'fact': "'Gracile' means slender.",
+  'mesh_name': 'Gracile lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 730},
+ {'name': 'Inferior semilunar lobule',
+  'slug': 'inferior-semilunar-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Posterior-inferior cerebellar hemisphere (Crus II), below the horizontal fissure.',
+  'function': 'Linked to prefrontal cortex and supports language, executive function and working memory.',
+  'damage_effects': 'Damage may cause problems with verbal fluency, planning and affect, in addition to limb '
+                    'ataxia.',
+  'fact': 'Crus I and II of the cerebellum are greatly expanded in humans compared with other primates.',
+  'mesh_name': 'Inferior semilunar lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 740},
+ {'name': 'Lingula of cerebellum',
+  'slug': 'lingula-of-cerebellum',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Most anterior and inferior part of the vermis (lobule I), lying along the superior medullary '
+              'velum.',
+  'function': 'Contributes to postural control through input from the spinal cord.',
+  'damage_effects': 'Damage can cause truncal imbalance.',
+  'fact': "Its name means 'little tongue'.",
+  'mesh_name': 'Lingula of cerebellum',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 750},
+ {'name': 'Nodule of vermis',
+  'slug': 'nodule-of-vermis',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Inferior vermis (lobule X) in the roof of the fourth ventricle, joined to the flocculi.',
+  'function': 'Part of the vestibulocerebellum: controls balance and the vestibulo-ocular reflex.',
+  'damage_effects': 'Damage (for example from medulloblastoma) causes severe truncal ataxia, vertigo and '
+                    'nystagmus.',
+  'fact': 'Medulloblastoma classically arises from the region near the nodulus and fourth ventricle in '
+          'children.',
+  'mesh_name': 'Nodule of vermis',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 760},
+ {'name': 'Peduncle of flocculus',
+  'slug': 'peduncle-of-flocculus',
+  'category': 'structure',
+  'color': '#14B8A6',
+  'location': 'Narrow stalk connecting the flocculus to the nodulus of the vermis on each side.',
+  'function': 'Carries fibres linking the flocculus with the nodulus, parts of the vestibulocerebellum for '
+              'balance and eye movement.',
+  'damage_effects': 'Damage causes balance and eye-movement disturbance similar to flocculonodular lobe '
+                    'lesions.',
+  'fact': 'It is a tiny structure that is easily overlooked in standard atlases.',
+  'mesh_name': 'Peduncle of flocculus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 770},
+ {'name': 'Posterior quadrangular lobule',
+  'slug': 'posterior-quadrangular-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Superior-posterior cerebellar hemisphere (lobule HVI), behind the primary fissure.',
+  'function': 'Involved in coordination of limb movement and, through its connections, in some cognitive and '
+              'language tasks.',
+  'damage_effects': 'Damage can cause limb ataxia and subtle language or executive deficits.',
+  'fact': 'Cognitive tasks activate the lateral posterior lobules rather than the anterior motor ones.',
+  'mesh_name': 'Posterior quadrangular lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 780},
+ {'name': 'Pyramis of vermis',
+  'slug': 'pyramis-of-vermis',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Inferior vermis (lobule VIII), in front of the uvula.',
+  'function': 'Contributes to coordination of the trunk and limbs, including a second sensorimotor map of '
+              'the body.',
+  'damage_effects': 'Damage causes trunk and gait ataxia.',
+  'fact': 'It is called the pyramis because it looks like a small pyramid on the midline.',
+  'mesh_name': 'Pyramis of vermis',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 790},
+ {'name': 'Superior cerebellar peduncle',
+  'slug': 'superior-cerebellar-peduncle',
+  'category': 'structure',
+  'color': '#14B8A6',
+  'location': 'Connects the cerebellum to the midbrain, running along the upper lateral border of the fourth '
+              'ventricle.',
+  'function': 'Main output pathway of the cerebellum: carries dentate and interposed nuclei fibres to the '
+              'red nucleus and thalamus (dentatorubrothalamic tract); also carries ventral spinocerebellar '
+              'input.',
+  'damage_effects': 'Damage causes ipsilateral limb ataxia and intention tremor; Holmes (rubral) tremor can '
+                    'follow midbrain lesions involving it.',
+  'fact': 'Its fibres decussate in the midbrain before reaching the red nucleus.',
+  'mesh_name': 'Superior cerebellar peduncle',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 800},
+ {'name': 'Superior semilunar lobule',
+  'slug': 'superior-semilunar-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Posterior cerebellar hemisphere (Crus I), above the horizontal fissure.',
+  'function': 'Linked with prefrontal cortex and involved in language, working memory and executive control.',
+  'damage_effects': 'Damage may cause executive and language deficits as well as limb ataxia.',
+  'fact': 'Crus I is among the parts of the cerebellum that expanded most in human evolution.',
+  'mesh_name': 'Superior semilunar lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 810},
+ {'name': 'Tonsil of cerebellum',
+  'slug': 'tonsil-of-cerebellum',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Inferior-medial hemisphere (lobule HIX), sitting close to the foramen magnum.',
+  'function': 'Contributes to balance, eye movement and trunk and limb coordination.',
+  'damage_effects': 'Herniation through the foramen magnum (Chiari malformation or raised pressure) '
+                    'compresses the medulla, causing headache, neck pain, breathing problems and potentially '
+                    'death.',
+  'fact': 'Tonsillar herniation is a life-threatening complication of raised intracranial pressure.',
+  'mesh_name': 'Tonsil of cerebellum',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 820},
+ {'name': 'Tuber of vermis',
+  'slug': 'tuber-of-vermis',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Inferior-posterior vermis (lobule VII B), between the folium and the pyramis.',
+  'function': 'Supports coordination of the trunk and legs and cognitive-emotional regulation.',
+  'damage_effects': 'Damage can cause gait ataxia and emotional or cognitive changes.',
+  'fact': "'Tuber' means 'swelling' in Latin.",
+  'mesh_name': 'Tuber of vermis',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 830},
+ {'name': 'Uvula of vermis',
+  'slug': 'uvula-of-vermis',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Inferior vermis (lobule IX), between the pyramis and the nodulus.',
+  'function': 'Part of the vestibulocerebellum: contributes to balance, posture and vestibular reflexes.',
+  'damage_effects': 'Damage causes truncal ataxia and balance loss.',
+  'fact': "Its name means 'little grape', after its shape.",
+  'mesh_name': 'Uvula of vermis',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 840},
+ {'name': 'Wing of central lobule',
+  'slug': 'wing-of-central-lobule',
+  'category': 'lobe',
+  'color': '#14B8A6',
+  'location': 'Lateral extension of the central lobule into the anterior cerebellar hemisphere.',
+  'function': 'Extends the anterior spinocerebellar region to the hemisphere, helping to coordinate limb '
+              'movements.',
+  'damage_effects': 'Damage can cause ipsilateral limb ataxia.',
+  'fact': 'Together with the central lobule it forms a single functional lobule across the midline.',
+  'mesh_name': 'Wing of central lobule',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 850},
+ {'name': 'Accessory nucleus of oculomotor nerve',
+  'slug': 'accessory-nucleus-of-oculomotor-nerve',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Midbrain tegmentum at the level of the superior colliculus, dorsal to the oculomotor nucleus '
+              '(Edinger-Westphal nucleus).',
+  'function': 'Parasympathetic nucleus that constricts the pupil and controls lens accommodation via the '
+              'oculomotor nerve and ciliary ganglion.',
+  'damage_effects': 'Damage causes a dilated, non-reactive pupil (mydriasis) and loss of accommodation.',
+  'fact': 'It is named after Ludwig Edinger and Carl Westphal, who described it in the 1880s.',
+  'mesh_name': 'Accessory nucleus of oculomotor nerve',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 860},
+ {'name': 'Aqueduct of midbrain',
+  'slug': 'aqueduct-of-midbrain',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Narrow channel through the midbrain, connecting the third and fourth ventricles.',
+  'function': 'Carries cerebrospinal fluid from the third to the fourth ventricle.',
+  'damage_effects': 'Blockage (aqueductal stenosis) causes obstructive hydrocephalus with enlarged lateral '
+                    'and third ventricles.',
+  'fact': 'At only about 1-2 mm wide, it is a common site of CSF obstruction.',
+  'mesh_name': 'Aqueduct of midbrain',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 870},
+ {'name': 'Inferior colliculus',
+  'slug': 'inferior-colliculus',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Dorsal midbrain (tectum), the lower pair of the four bumps of the corpora quadrigemina.',
+  'function': 'Major relay in the auditory pathway; integrates sound localisation and projects to the medial '
+              'geniculate body.',
+  'damage_effects': 'Damage causes hearing deficits, poor sound localisation and difficulty understanding '
+                    'speech in noise.',
+  'fact': 'The inferior colliculus also helps trigger the startle response to loud sounds.',
+  'mesh_name': 'Inferior colliculus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 880},
+ {'name': 'Interpeduncular fossa',
+  'slug': 'interpeduncular-fossa',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Ventral midbrain, a depression between the two cerebral peduncles.',
+  'function': 'Marks where the oculomotor nerve exits; contains the posterior perforated substance, through '
+              'which small arteries enter the brain.',
+  'damage_effects': 'Compression by a basilar tip or posterior communicating artery aneurysm can cause '
+                    'oculomotor palsy; midline lesions can cause eye-movement abnormalities.',
+  'fact': 'It contains the interpeduncular nucleus, involved in the habenular reward and aversion circuit.',
+  'mesh_name': 'Interpeduncular fossa',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 890},
+ {'name': 'Medulla oblongata',
+  'slug': 'medulla-oblongata',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Lowest part of the brainstem, continuous with the spinal cord at the foramen magnum.',
+  'function': 'Controls vital autonomic functions including breathing, heart rate, blood pressure, vomiting, '
+              'swallowing and coughing; contains the pyramidal decussation.',
+  'damage_effects': 'Damage can cause respiratory and cardiovascular failure; lateral medullary (Wallenberg) '
+                    'syndrome causes vertigo, dysphagia, hoarseness and crossed sensory loss.',
+  'fact': 'Pressure on the medulla from tonsillar herniation can be fatal.',
+  'mesh_name': 'Medulla oblongata',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 900},
+ {'name': 'Midbrain',
+  'slug': 'midbrain',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Uppermost part of the brainstem, between the pons and the diencephalon.',
+  'function': 'Controls eye movements, pupil reflexes, auditory and visual reflexes and motor coordination '
+              'via the substantia nigra and red nucleus.',
+  'damage_effects': 'Damage can cause ocular palsies, Parinaud syndrome, Weber syndrome (oculomotor palsy '
+                    'with contralateral hemiparesis) and impaired consciousness.',
+  'fact': 'It is the smallest of the three brainstem divisions, about 2 cm long.',
+  'mesh_name': 'Midbrain',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 910},
+ {'name': 'Motor nucleus of facial nerve',
+  'slug': 'motor-nucleus-of-facial-nerve',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Lower pons, in the ventrolateral tegmentum.',
+  'function': 'Supplies the muscles of facial expression, the stapedius and the posterior belly of digastric '
+              'via the facial nerve.',
+  'damage_effects': 'A lesion causes ipsilateral paralysis of the whole face (including forehead), unlike an '
+                    'upper motor neuron lesion.',
+  'fact': 'Neurons for the upper face receive input from both hemispheres, which is why a central lesion '
+          'spares the forehead.',
+  'mesh_name': 'Motor nucleus of facial nerve',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 920},
+ {'name': 'Nucleus of abducens nerve',
+  'slug': 'nucleus-of-abducens-nerve',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Caudal pons, beneath the facial colliculus in the floor of the fourth ventricle.',
+  'function': 'Controls the lateral rectus muscle and horizontal gaze through interneurons connected to the '
+              'opposite oculomotor nucleus.',
+  'damage_effects': 'Damage causes ipsilateral horizontal gaze palsy (inability to look toward the side of '
+                    'the lesion) and may involve the facial nerve fibres looping around it.',
+  'fact': 'The facial nerve loops around this nucleus, forming the facial colliculus.',
+  'mesh_name': 'Nucleus of abducens nerve',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 930},
+ {'name': 'Nucleus of oculomotor nerve',
+  'slug': 'nucleus-of-oculomotor-nerve',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Midbrain tegmentum at the level of the superior colliculus, near the midline in front of the '
+              'aqueduct.',
+  'function': 'Supplies most extraocular muscles (medial, superior, inferior rectus, inferior oblique) and '
+              'the levator palpebrae superioris.',
+  'damage_effects': "Damage causes ptosis, a 'down and out' eye position and diplopia, with a dilated pupil "
+                    'if parasympathetic fibres are involved.',
+  'fact': 'It controls four of the six eye muscles that move the eye.',
+  'mesh_name': 'Nucleus of oculomotor nerve',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 940},
+ {'name': 'Olive',
+  'slug': 'olive',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Rostral medulla, the oval bulge lateral to the pyramid (inferior olivary nucleus).',
+  'function': 'Sends climbing fibres to the cerebellum, supporting motor learning and timing.',
+  'damage_effects': 'Damage can cause palatal myoclonus and, in the lateral medullary syndrome, balance '
+                    'impairment; hypertrophic olivary degeneration can follow lesions of the '
+                    'dentato-rubro-olivary pathway.',
+  'fact': 'It is a crumpled sheet of grey matter that looks like a folded purse.',
+  'mesh_name': 'Olive',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 950},
+ {'name': 'Pons',
+  'slug': 'pons',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Brainstem region between the midbrain and medulla, in front of the cerebellum.',
+  'function': 'Relays information from the cerebral cortex to the cerebellum; contains nuclei of cranial '
+              'nerves V–VIII and centres for breathing and sleep.',
+  'damage_effects': 'Basilar artery stroke can cause locked-in syndrome (conscious but paralysed except for '
+                    'vertical eye movements); rapid sodium correction can cause central pontine '
+                    'myelinolysis.',
+  'fact': "Pons means 'bridge' in Latin.",
+  'mesh_name': 'Pons',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 960},
+ {'name': 'Pyramid of medulla oblongata',
+  'slug': 'pyramid-of-medulla-oblongata',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Ventral medulla, paired columns on either side of the anterior midline.',
+  'function': 'Carries the corticospinal tract; most fibres cross at the pyramidal decussation to control '
+              'voluntary movement of the opposite body.',
+  'damage_effects': 'Damage (medial medullary syndrome) causes contralateral weakness of the arm and leg '
+                    'with sparing of the face.',
+  'fact': 'About 90 percent of corticospinal fibres cross at the decussation of the pyramids.',
+  'mesh_name': 'Pyramid of medulla oblongata',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 970},
+ {'name': 'Red nucleus',
+  'slug': 'red-nucleus',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Midbrain tegmentum, ventral to the cerebral aqueduct and next to the substantia nigra.',
+  'function': 'Receives cerebellar and cortical input and contributes to limb motor control and coordination '
+              'through the rubrospinal tract.',
+  'damage_effects': 'Damage causes contralateral tremor, ataxia and involuntary movements (Benedikt syndrome '
+                    'combined with oculomotor palsy).',
+  'fact': 'Its red colour comes from iron-rich pigments and a rich blood supply.',
+  'mesh_name': 'Red nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 980},
+ {'name': 'Superior colliculus',
+  'slug': 'superior-colliculus',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Dorsal midbrain (tectum), the upper pair of the four colliculi.',
+  'function': 'Coordinates rapid orienting eye and head movements (saccades) toward visual stimuli and '
+              'integrates visual with auditory and somatic input.',
+  'damage_effects': 'Damage, as in Parinaud syndrome from pineal tumours, causes impaired upward gaze and '
+                    'abnormal pupil responses.',
+  'fact': 'In many animals the superior colliculus (optic tectum) is the main visual centre.',
+  'mesh_name': 'Superior colliculus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 990},
+ {'name': 'Superior salivatory nucleus',
+  'slug': 'superior-salivatory-nucleus',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Lower pons, in the lateral tegmentum near the facial motor nucleus.',
+  'function': 'Parasympathetic nucleus that stimulates the lacrimal, submandibular and sublingual glands '
+              'through the facial nerve.',
+  'damage_effects': 'Damage reduces tear and saliva production, causing dry eye and dry mouth.',
+  'fact': 'Its fibres travel with the nervus intermedius, the sensory and autonomic part of the facial '
+          'nerve.',
+  'mesh_name': 'Superior salivatory nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1000},
+ {'name': 'Vestibular nuclei',
+  'slug': 'vestibular-nuclei',
+  'category': 'structure',
+  'color': '#8D6E63',
+  'location': 'Dorsolateral pons and upper medulla, under the floor of the fourth ventricle.',
+  'function': 'Process balance and head-position information from the inner ear and coordinate it with eye '
+              'movements and posture.',
+  'damage_effects': 'Damage causes vertigo, nystagmus, nausea and unsteadiness, as in lateral medullary '
+                    'syndrome.',
+  'fact': 'They send fibres down the vestibulospinal tracts to keep us upright.',
+  'mesh_name': 'Vestibular nuclei',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1010},
+ {'name': 'Adenohypophysis',
+  'slug': 'adenohypophysis',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Anterior part of the pituitary gland, sitting in the sella turcica below the hypothalamus.',
+  'function': 'Secretes growth hormone, prolactin, ACTH, TSH, FSH and LH under the control of hypothalamic '
+              'releasing hormones.',
+  'damage_effects': "Damage or tumours cause hypopituitarism or hormone excess (acromegaly, Cushing's "
+                    'disease, hyperprolactinaemia); large tumours compress the optic chiasm, producing '
+                    'bitemporal hemianopia.',
+  'fact': "Called the 'master gland' because it regulates other endocrine glands.",
+  'mesh_name': 'Adenohypophysis',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 1020},
+ {'name': 'Anterior hypothalamus',
+  'slug': 'anterior-hypothalamus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Front part of the hypothalamus, above the optic chiasm.',
+  'function': 'Regulates body temperature (heat dissipation), sleep and circadian rhythm through the '
+              'suprachiasmatic nucleus.',
+  'damage_effects': 'Damage can cause hyperthermia and disturbed sleep-wake cycles.',
+  'fact': "The suprachiasmatic nucleus sits here and acts as the body's master clock.",
+  'mesh_name': 'Anterior hypothalamus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1030},
+ {'name': 'Anterior nuclei of thalamus',
+  'slug': 'anterior-nuclei-of-thalamus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Front of the thalamus, beneath the fornix, forming the anterior tubercle.',
+  'function': 'Part of the Papez circuit: relays hippocampal and mammillary body input to the cingulate '
+              'cortex for memory.',
+  'damage_effects': 'Damage can cause anterograde amnesia, as in Korsakoff syndrome.',
+  'fact': 'These nuclei are central to the memory circuit described by James Papez in 1937.',
+  'mesh_name': 'Anterior nuclei of thalamus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1040},
+ {'name': 'Habenula',
+  'slug': 'habenula',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Small structure at the back of the thalamus, next to the pineal gland.',
+  'function': 'Regulates reward, aversion, mood, sleep and decision-making by controlling dopamine and '
+              'serotonin neurons.',
+  'damage_effects': 'Dysfunction is linked to depression and addiction; its role is a focus of research.',
+  'fact': "Called the 'anti-reward centre' because it fires when an expected reward fails to arrive.",
+  'mesh_name': 'Habenula',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1050},
+ {'name': 'Intralaminar and lateral posterior nuclei',
+  'slug': 'intralaminar-and-lateral-posterior-nuclei',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Thalamus: intralaminar nuclei lie within the internal medullary lamina; the lateral posterior '
+              'nucleus lies behind the lateral nuclei.',
+  'function': 'Intralaminar nuclei help maintain arousal and attention; the lateral posterior nucleus '
+              'contributes to sensory integration with the parietal cortex.',
+  'damage_effects': 'Damage can cause reduced consciousness, impaired attention or neglect.',
+  'fact': 'Deep brain stimulation of the intralaminar nuclei has been explored in minimally conscious '
+          'states.',
+  'mesh_name': 'Intralaminar and lateral posterior nuclei',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1060},
+ {'name': 'Lateral geniculate body',
+  'slug': 'lateral-geniculate-body',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Posterior-lateral thalamus, a small bump under the pulvinar.',
+  'function': 'Visual relay: receives retinal input through the optic tract and projects to the primary '
+              'visual cortex via the optic radiation.',
+  'damage_effects': 'Damage causes contralateral homonymous visual field loss.',
+  'fact': 'It has six layers, with layers receiving input from different eyes and cell types.',
+  'mesh_name': 'Lateral geniculate body',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1070},
+ {'name': 'Lateral hypothalamus',
+  'slug': 'lateral-hypothalamus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Lateral zone of the hypothalamus, around the medial forebrain bundle.',
+  'function': 'Stimulates feeding and wakefulness; contains orexin (hypocretin) neurons.',
+  'damage_effects': 'Damage causes reduced feeding and weight loss; loss of orexin neurons causes narcolepsy '
+                    'with cataplexy.',
+  'fact': "Called the 'hunger centre' in early studies.",
+  'mesh_name': 'Lateral hypothalamus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1080},
+ {'name': 'Mamillary body',
+  'slug': 'mamillary-body',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Paired round bumps on the underside of the hypothalamus, behind the tuber cinereum.',
+  'function': 'Part of the Papez circuit for recollective memory; receives input from the hippocampus via '
+              'the fornix and sends it to the anterior thalamus.',
+  'damage_effects': 'Damage, commonly from thiamine deficiency (Wernicke-Korsakoff syndrome), causes severe '
+                    'anterograde amnesia.',
+  'fact': "Their name comes from the Latin for 'nipple-like'.",
+  'mesh_name': 'Mamillary body',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1090},
+ {'name': 'Medial geniculate body',
+  'slug': 'medial-geniculate-body',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Posterior-lateral thalamus, next to the lateral geniculate body.',
+  'function': 'Auditory relay: receives input from the inferior colliculus and projects to the primary '
+              'auditory cortex.',
+  'damage_effects': 'Damage causes hearing problems, impaired sound localisation and difficulty '
+                    'understanding speech.',
+  'fact': 'It has a tonotopic map, organised by sound frequency.',
+  'mesh_name': 'Medial geniculate body',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1100},
+ {'name': 'Mediodorsal nucleus',
+  'slug': 'mediodorsal-nucleus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Medial thalamus, the largest medial nuclear group.',
+  'function': 'Connected with the prefrontal cortex, limbic system and amygdala; supports memory, executive '
+              'function and emotion.',
+  'damage_effects': 'Damage causes memory impairment, apathy and executive dysfunction (Korsakoff syndrome).',
+  'fact': 'Reduced mediodorsal volume is a finding in schizophrenia research.',
+  'mesh_name': 'Mediodorsal nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1110},
+ {'name': 'Neurohypophysis',
+  'slug': 'neurohypophysis',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Posterior pituitary, below the hypothalamus.',
+  'function': 'Releases oxytocin and vasopressin (ADH), made in the hypothalamus.',
+  'damage_effects': 'Damage causes diabetes insipidus: excessive urination and thirst from vasopressin '
+                    'deficiency.',
+  'fact': 'It stores and releases hormones but does not make them.',
+  'mesh_name': 'Neurohypophysis',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 1120},
+ {'name': 'Optic chiasm',
+  'slug': 'optic-chiasm',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Base of the brain, above the pituitary gland and in front of the hypothalamus.',
+  'function': 'Where optic nerve fibres from the nasal retinas cross to the opposite optic tract, combining '
+              'visual fields.',
+  'damage_effects': 'Compression (for example by a pituitary tumour) causes bitemporal hemianopia, loss of '
+                    'the outer halves of vision.',
+  'fact': 'Only about half of retinal fibres cross at the chiasm.',
+  'mesh_name': 'Optic chiasm',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1130},
+ {'name': 'Optic tract',
+  'slug': 'optic-tract',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'From the optic chiasm around the cerebral peduncle to the lateral geniculate body.',
+  'function': 'Carries visual information from both eyes, representing the opposite visual field.',
+  'damage_effects': 'Damage causes contralateral homonymous hemianopia.',
+  'fact': 'Some tract fibres go to the pretectum and superior colliculus for reflexes rather than to the '
+          'thalamus.',
+  'mesh_name': 'Optic tract',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1140},
+ {'name': 'Pineal gland',
+  'slug': 'pineal-gland',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Midline, behind the third ventricle, at the posterior end of the thalamus.',
+  'function': 'Secretes melatonin to regulate sleep-wake cycles in response to light and darkness.',
+  'damage_effects': 'Tumours can compress the tectum and aqueduct, causing hydrocephalus and Parinaud '
+                    'syndrome; calcification is common with age.',
+  'fact': "Descartes called it the 'seat of the soul'.",
+  'mesh_name': 'Pineal gland',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1150},
+ {'name': 'Posterior commissure',
+  'slug': 'posterior-commissure',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Midline fibre bundle at the junction of the third ventricle and the cerebral aqueduct, '
+              'beneath the pineal gland.',
+  'function': 'Connects the pretectal nuclei for the consensual pupillary light reflex and links parts of '
+              'the midbrain.',
+  'damage_effects': 'Damage or compression (for example by a pineal tumour) causes Parinaud syndrome: upgaze '
+                    'palsy, light-near dissociation and convergence-retraction nystagmus.',
+  'fact': 'It is one of the few commissures crossing within the midbrain region.',
+  'mesh_name': 'Posterior commissure',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1160},
+ {'name': 'Posterior hypothalamus',
+  'slug': 'posterior-hypothalamus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Rear part of the hypothalamus, above the mammillary bodies.',
+  'function': 'Regulates body temperature conservation, arousal and sympathetic output.',
+  'damage_effects': 'Damage can cause hypothermia, somnolence and autonomic disturbance.',
+  'fact': 'It helps conserve heat, complementing the heat-dissipating anterior hypothalamus.',
+  'mesh_name': 'Posterior hypothalamus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1170},
+ {'name': 'Preoptic hypothalamus',
+  'slug': 'preoptic-hypothalamus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Anterior-most part of the hypothalamus, in front of the optic chiasm and around the lamina '
+              'terminalis.',
+  'function': 'Controls thermoregulation, sleep, reproductive hormone release and sexual behaviour.',
+  'damage_effects': 'Damage can disturb temperature regulation, sleep and sexual function.',
+  'fact': 'The sexually dimorphic nucleus of the preoptic area differs in size between sexes.',
+  'mesh_name': 'Preoptic hypothalamus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1180},
+ {'name': 'Pulvinar',
+  'slug': 'pulvinar',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Posterior thalamus, the largest nuclear group, overhanging the midbrain.',
+  'function': 'Coordinates visual attention, helps filter distractions and links visual with parietal and '
+              'temporal cortex.',
+  'damage_effects': 'Damage can cause visual neglect, impaired attention and some pain syndromes.',
+  'fact': 'The pulvinar is greatly enlarged in humans compared with other mammals.',
+  'mesh_name': 'Pulvinar',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1190},
+ {'name': 'Stria medullaris thalami',
+  'slug': 'stria-medullaris-thalami',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Fibre bundle along the upper medial surface of the thalamus, running to the habenula.',
+  'function': 'Carries input from the septal nuclei and hypothalamus to the habenula.',
+  'damage_effects': 'Damage can contribute to mood and reward-processing disturbances.',
+  'fact': 'It forms part of the habenular pathway implicated in depression.',
+  'mesh_name': 'Stria medullaris thalami',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1200},
+ {'name': 'Tuberal hypothalamus',
+  'slug': 'tuberal-hypothalamus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Middle region of the hypothalamus around the infundibulum and tuber cinereum.',
+  'function': 'Contains nuclei that control feeding, satiety, growth hormone release and the portal blood '
+              'supply to the anterior pituitary.',
+  'damage_effects': 'Damage can cause hyperphagia and obesity, endocrine disturbances and behavioural '
+                    'changes.',
+  'fact': 'The arcuate nucleus here senses leptin and ghrelin signals about energy balance.',
+  'mesh_name': 'Tuberal hypothalamus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1210},
+ {'name': 'Ventral anterior nucleus',
+  'slug': 'ventral-anterior-nucleus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Anterior part of the ventral thalamus, in front of the ventral lateral nucleus.',
+  'function': 'Relays basal ganglia output to the premotor and prefrontal cortex for movement initiation.',
+  'damage_effects': 'Damage can cause movement initiation problems and contribute to akinesia.',
+  'fact': 'Its input comes mainly from the globus pallidus internus and substantia nigra reticulata.',
+  'mesh_name': 'Ventral anterior nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1220},
+ {'name': 'Ventral laterodorsal nucleus',
+  'slug': 'ventral-laterodorsal-nucleus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Part of the ventral thalamus, dorsal to the ventral lateral nucleus.',
+  'function': 'Relays basal ganglia and cerebellar signals to motor cortex for movement planning.',
+  'damage_effects': 'Damage can cause movement disorders, including tremor and impaired coordination.',
+  'fact': 'Lesions or stimulation here are used in some surgical treatments for tremor.',
+  'mesh_name': 'Ventral laterodorsal nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1230},
+ {'name': 'Ventral lateroventral nucleus',
+  'slug': 'ventral-lateroventral-nucleus',
+  'category': 'structure',
+  'color': '#F97316',
+  'location': 'Ventral lateral thalamus, where cerebellar fibres enter (often labelled VIM, ventral '
+              'intermediate).',
+  'function': 'Relays cerebellar output to the primary motor cortex.',
+  'damage_effects': 'Damage can impair coordination; its surgical lesion or deep brain stimulation treats '
+                    'essential and parkinsonian tremor.',
+  'fact': 'The ventral intermediate nucleus is a classic target for tremor surgery.',
+  'mesh_name': 'Ventral lateroventral nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1240},
+ {'name': 'Basolateral complex',
+  'slug': 'basolateral-complex',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Amygdala, in the medial temporal lobe in front of the hippocampus; the largest group of '
+              'amygdaloid nuclei (lateral, basal and accessory basal).',
+  'function': 'Receives sensory input and attaches emotional meaning to it; central to fear learning, '
+              'emotional memory and evaluating threats.',
+  'damage_effects': 'Damage reduces fear and emotional memory; bilateral amygdala damage (Urbach-Wiethe '
+                    'disease) can impair recognising fearful faces.',
+  'fact': "It is the amygdala's 'input' region, feeding the central nucleus that drives responses.",
+  'mesh_name': 'Basolateral complex',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1250},
+ {'name': 'Caudate nucleus',
+  'slug': 'caudate-nucleus',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Deep telencephalon, arching along the lateral wall of the lateral ventricle; head, body and '
+              'tail.',
+  'function': 'Part of the dorsal striatum: supports learning, goal-directed behaviour, cognition and '
+              'planning of movement through frontal loops.',
+  'damage_effects': 'Damage causes apathy, executive dysfunction and abulia; its degeneration is central to '
+                    "Huntington's disease, causing chorea.",
+  'fact': "Caudate means 'tailed', after its long curved tail.",
+  'mesh_name': 'Caudate nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1260},
+ {'name': 'Central nucleus',
+  'slug': 'central-nucleus',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Medial part of the amygdala.',
+  'function': 'Output nucleus of the amygdala: drives fear responses via the hypothalamus and brainstem, '
+              'including freezing, heart rate and stress hormones.',
+  'damage_effects': 'Damage reduces conditioned fear responses; hyperactivity is linked to anxiety '
+                    'disorders.',
+  'fact': 'It connects the amygdala to autonomic and endocrine pathways.',
+  'mesh_name': 'Central nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1270},
+ {'name': 'Corticomedial group',
+  'slug': 'corticomedial-group',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Amygdala, the superficial medial group close to the surface of the temporal lobe.',
+  'function': 'Receives olfactory and pheromonal input and contributes to social and reproductive '
+              'behaviours.',
+  'damage_effects': 'Damage may alter responses to smell and social cues.',
+  'fact': 'It is the older, olfactory-linked part of the amygdala.',
+  'mesh_name': 'Corticomedial group',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1280},
+ {'name': 'Globus pallidus external',
+  'slug': 'globus-pallidus-external',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Deep telencephalon, the lateral part of the globus pallidus, medial to the putamen.',
+  'function': 'Part of the indirect basal ganglia pathway: inhibits the subthalamic nucleus to regulate '
+              'movement.',
+  'damage_effects': 'Dysfunction contributes to parkinsonism and movement disorders such as chorea.',
+  'fact': 'It is a pacemaker-like hub in the basal ganglia.',
+  'mesh_name': 'Globus pallidus external',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1290},
+ {'name': 'Globus pallidus internal',
+  'slug': 'globus-pallidus-internal',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Deep telencephalon, the medial part of the globus pallidus, next to the internal capsule.',
+  'function': 'Main output of the basal ganglia: tonically inhibits the thalamus; its activity gates '
+              'movement.',
+  'damage_effects': "Overactivity causes bradykinesia in Parkinson's disease; underactivity causes "
+                    "dyskinesia or chorea. Deep brain stimulation here treats Parkinson's disease and "
+                    'dystonia.',
+  'fact': "Globus pallidus means 'pale globe', because of its pale myelinated fibres.",
+  'mesh_name': 'Globus pallidus internal',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1300},
+ {'name': 'Lateral nucleus',
+  'slug': 'lateral-nucleus',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Lateral part of the amygdala.',
+  'function': 'Main entry point for sensory input from the cortex and thalamus; encodes learned associations '
+              'such as tone-shock pairing.',
+  'damage_effects': 'Damage prevents the formation of fear conditioning.',
+  'fact': 'It is where much of classical fear conditioning is stored in animal studies.',
+  'mesh_name': 'Lateral nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1310},
+ {'name': 'Nucleus accumbens',
+  'slug': 'nucleus-accumbens',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Base of the striatum, where the caudate and putamen meet below the anterior limb of the '
+              'internal capsule.',
+  'function': 'Reward, motivation, pleasure and reinforcement learning; key target of dopamine from the '
+              'ventral tegmental area.',
+  'damage_effects': 'Dysfunction is implicated in addiction, depression (anhedonia) and apathy.',
+  'fact': 'Almost all addictive drugs increase dopamine activity here.',
+  'mesh_name': 'Nucleus accumbens',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1320},
+ {'name': 'Putamen',
+  'slug': 'putamen',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Deep telencephalon, the lateral part of the lentiform nucleus, between the external capsule '
+              'and the globus pallidus.',
+  'function': 'Part of the dorsal striatum: controls movement, motor learning and procedural habit '
+              'formation.',
+  'damage_effects': 'Damage or dopamine loss causes parkinsonism (rigidity and slowness); haemorrhage here '
+                    'is common in hypertension and causes contralateral hemiparesis.',
+  'fact': 'It is a common site of hypertensive haemorrhage because it is supplied by fragile '
+          'lenticulostriate arteries.',
+  'mesh_name': 'Putamen',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1330},
+ {'name': 'Septal nuclei',
+  'slug': 'septal-nuclei',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Midline, below the genu of the corpus callosum and in front of the lamina terminalis.',
+  'function': 'Part of the limbic system; involved in reward, pleasure and emotion, and relays hippocampal '
+              'and hypothalamic signals.',
+  'damage_effects': 'Damage can cause emotional hyperreactivity (septal rage in animal studies) and changes '
+                    'in motivation.',
+  'fact': 'Early electrode studies found that stimulating this region produced intense pleasure.',
+  'mesh_name': 'Septal nuclei',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1340},
+ {'name': 'Substantia nigra',
+  'slug': 'substantia-nigra',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Midbrain, between the cerebral peduncle and the tegmentum.',
+  'function': 'Pars compacta produces dopamine for the striatum, enabling movement initiation; pars '
+              'reticulata is a basal ganglia output nucleus.',
+  'damage_effects': "Loss of dopamine neurons causes Parkinson's disease: tremor, rigidity, bradykinesia and "
+                    'postural instability.',
+  'fact': "Its name means 'black substance', from neuromelanin pigment in its dopamine neurons.",
+  'mesh_name': 'Substantia nigra',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1350},
+ {'name': 'Subthalamic nucleus',
+  'slug': 'subthalamic-nucleus',
+  'category': 'structure',
+  'color': '#D97706',
+  'location': 'Diencephalon, below the thalamus and above the substantia nigra.',
+  'function': 'Excitatory basal ganglia nucleus that modulates movement by driving the globus pallidus '
+              'internus.',
+  'damage_effects': 'A lesion causes hemiballismus: sudden violent flinging of the opposite limbs. Deep '
+                    "brain stimulation here relieves Parkinson's symptoms.",
+  'fact': "It is the most common target for deep brain stimulation in Parkinson's disease.",
+  'mesh_name': 'Subthalamic nucleus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1360},
+ {'name': 'Anterior commissure',
+  'slug': 'anterior-commissure',
+  'category': 'structure',
+  'color': '#CBD5E1',
+  'location': 'Midline, small bundle crossing in front of the columns of the fornix, in the lamina '
+              'terminalis.',
+  'function': 'Connects the temporal lobes and olfactory structures of the two hemispheres, including the '
+              'amygdalae.',
+  'damage_effects': 'Damage can reduce interhemispheric transfer of olfactory and emotional information; it '
+                    'can take over some callosal functions in callosal agenesis.',
+  'fact': 'Phylogenetically older than the corpus callosum.',
+  'mesh_name': 'Anterior commissure',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1370},
+ {'name': 'Corpus callosum',
+  'slug': 'corpus-callosum',
+  'category': 'structure',
+  'color': '#CBD5E1',
+  'location': 'Midline, a thick arch of fibres beneath the cerebral hemispheres, forming the roof of the '
+              'lateral ventricles; consists of rostrum, genu, body and splenium.',
+  'function': 'Connects the left and right hemispheres, enabling communication and coordination between '
+              'them.',
+  'damage_effects': 'Cutting it (callosotomy) can cause split-brain effects such as alien-hand syndrome; '
+                    'agenesis can cause mild deficits; tumours such as glioblastoma may cross it, producing '
+                    "a 'butterfly' pattern.",
+  'fact': 'It holds about 200 million axons, the largest white matter tract in the brain.',
+  'mesh_name': 'Corpus callosum',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1380},
+ {'name': 'Fornix',
+  'slug': 'fornix',
+  'category': 'structure',
+  'color': '#CBD5E1',
+  'location': 'Arch of fibres from the hippocampus curving beneath the corpus callosum to the mammillary '
+              'bodies.',
+  'function': 'Major output pathway of the hippocampus, carrying signals to the mammillary bodies, septum '
+              'and anterior thalamus for memory.',
+  'damage_effects': 'Damage causes memory impairment; transecting it during surgery (e.g., colloid cyst '
+                    'removal) can cause anterograde amnesia.',
+  'fact': "Its name comes from the Latin for 'arch'; deep brain stimulation of it is being studied for "
+          "Alzheimer's disease.",
+  'mesh_name': 'Fornix',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1390},
+ {'name': 'Hippocampal commissure',
+  'slug': 'hippocampal-commissure',
+  'category': 'structure',
+  'color': '#CBD5E1',
+  'location': 'Midline, between the two crura of the fornix beneath the splenium of the corpus callosum.',
+  'function': 'Connects the left and right hippocampi.',
+  'damage_effects': 'Damage can reduce interhemispheric communication of memory-related signals.',
+  'fact': 'Also called the commissure of the fornix or psalterium.',
+  'mesh_name': 'Hippocampal commissure',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1400},
+ {'name': 'Stria terminalis',
+  'slug': 'stria-terminalis',
+  'category': 'structure',
+  'color': '#CBD5E1',
+  'location': 'C-shaped bundle running along the groove between the thalamus and caudate nucleus, from the '
+              'amygdala to the hypothalamus and septal area.',
+  'function': 'Principal output tract of the amygdala to the hypothalamus; carries signals for stress, fear '
+              'and reproduction.',
+  'damage_effects': 'Damage can reduce stress responses and affect emotional regulation.',
+  'fact': 'It links the amygdala to the bed nucleus of the stria terminalis, which is involved in anxiety.',
+  'mesh_name': 'Stria terminalis',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1410},
+ {'name': 'White matter of telencephalon',
+  'slug': 'white-matter-of-telencephalon',
+  'category': 'structure',
+  'color': '#CBD5E1',
+  'location': 'Deep core of the cerebral hemispheres beneath the cortex.',
+  'function': 'Contains association, commissural and projection fibres that connect cortical areas and carry '
+              'signals between the cortex and deeper structures.',
+  'damage_effects': 'Damage (stroke, multiple sclerosis, small-vessel disease) causes widespread problems '
+                    'such as slowed thinking, weakness or visual and cognitive deficits depending on the '
+                    'tracts involved.',
+  'fact': "White matter makes up roughly half of the brain's volume.",
+  'mesh_name': 'White matter of telencephalon',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1420},
+ {'name': 'Acoustic radiation',
+  'slug': 'acoustic-radiation',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the medial geniculate body of the thalamus through the sublenticular internal capsule to '
+              "Heschl's gyrus in the temporal lobe.",
+  'function': 'Carries auditory information from the thalamus to primary auditory cortex.',
+  'damage_effects': 'Damage causes hearing impairment, difficulty understanding speech and '
+                    'sound-localisation problems.',
+  'fact': 'Because auditory input is bilateral in the brainstem, unilateral damage causes only mild '
+          'deficits.',
+  'mesh_name': 'Acoustic radiation',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1430},
+ {'name': 'Anterior thalamic radiation',
+  'slug': 'anterior-thalamic-radiation',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Connects the anterior and mediodorsal thalamic nuclei with the prefrontal cortex through the '
+              'anterior limb of the internal capsule.',
+  'function': 'Supports executive function, planning, emotion and memory through thalamocortical loops.',
+  'damage_effects': 'Damage can cause apathy, executive dysfunction and memory problems.',
+  'fact': 'It is one of the main white matter tracts studied in depression and psychosis.',
+  'mesh_name': 'Anterior thalamic radiation',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1440},
+ {'name': 'Arcuate fasciculus',
+  'slug': 'arcuate-fasciculus',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': "Arches around the lateral fissure, connecting posterior temporal cortex (Wernicke's area) "
+              "with the frontal lobe (Broca's area).",
+  'function': 'Links language comprehension and production areas; supports speech repetition and '
+              'phonological processing.',
+  'damage_effects': 'Damage causes conduction aphasia: fluent speech with good comprehension but poor '
+                    'repetition.',
+  'fact': 'It is usually larger in the left hemisphere in right-handed people.',
+  'mesh_name': 'Arcuate fasciculus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1450},
+ {'name': 'Corticobulbar tract',
+  'slug': 'corticobulbar-tract',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the motor cortex through the genu of the internal capsule to the cranial nerve nuclei in '
+              'the brainstem.',
+  'function': 'Controls voluntary movements of the face, jaw, tongue, pharynx and larynx.',
+  'damage_effects': 'Damage causes upper motor neuron facial weakness (lower face), dysarthria and '
+                    'difficulty swallowing; bilateral damage causes pseudobulbar palsy.',
+  'fact': 'Most cranial nerve nuclei receive bilateral input, which protects against deficits after '
+          'one-sided damage.',
+  'mesh_name': 'Corticobulbar tract',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1460},
+ {'name': 'Corticopontine tract (frontal)',
+  'slug': 'corticopontine-tract-frontal',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the frontal cortex through the internal capsule and cerebral peduncle to the pontine '
+              'nuclei.',
+  'function': 'Relays motor planning information from frontal cortex to the cerebellum via the pons.',
+  'damage_effects': 'Damage can contribute to ataxia and impaired motor planning.',
+  'fact': 'It forms the medial part of the cerebral peduncle.',
+  'mesh_name': 'Corticopontine tract (frontal)',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1470},
+ {'name': 'Corticopontine tract (occipital)',
+  'slug': 'corticopontine-tract-occipital',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the occipital cortex through the posterior limb of the internal capsule and cerebral '
+              'peduncle to the pontine nuclei.',
+  'function': 'Relays visual information to the cerebellum for visually guided movement.',
+  'damage_effects': 'Damage may impair visually guided coordination.',
+  'fact': 'Visual corticopontine projections let the cerebellum fine-tune eye-hand coordination.',
+  'mesh_name': 'Corticopontine tract (occipital)',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1480},
+ {'name': 'Corticopontine tract (parietal)',
+  'slug': 'corticopontine-tract-parietal',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the parietal cortex through the posterior limb of the internal capsule to the pontine '
+              'nuclei.',
+  'function': 'Relays spatial and somatosensory information to the cerebellum.',
+  'damage_effects': 'Damage may contribute to coordination and spatial problems.',
+  'fact': 'It is part of the large cortico-ponto-cerebellar loop.',
+  'mesh_name': 'Corticopontine tract (parietal)',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1490},
+ {'name': 'Corticospinal tract',
+  'slug': 'corticospinal-tract',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the motor cortex through the posterior limb of the internal capsule, cerebral peduncle, '
+              'pons and medullary pyramids to the spinal cord.',
+  'function': 'Main pathway for voluntary movement, especially fine movements of the hands and fingers.',
+  'damage_effects': 'Damage causes contralateral weakness, spasticity, hyperreflexia and a positive Babinski '
+                    'sign (upper motor neuron signs).',
+  'fact': 'About 90 percent of fibres cross at the pyramidal decussation.',
+  'mesh_name': 'Corticospinal tract',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1500},
+ {'name': 'Corticostriatal tract (anterior)',
+  'slug': 'corticostriatal-tract-anterior',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the prefrontal cortex to the caudate and putamen of the striatum.',
+  'function': 'Supports executive function, motivation and behavioural selection via the basal ganglia '
+              'loops.',
+  'damage_effects': 'Damage can cause apathy, impaired decision-making and executive dysfunction.',
+  'fact': 'It is a key route in the cognitive and limbic basal ganglia loops.',
+  'mesh_name': 'Corticostriatal tract (anterior)',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1510},
+ {'name': 'Corticostriatal tract (posterior)',
+  'slug': 'corticostriatal-tract-posterior',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From posterior parietal and temporal cortex to the posterior caudate and putamen.',
+  'function': 'Carries sensory and spatial information to the striatum for habit learning and action '
+              'selection.',
+  'damage_effects': 'Damage may affect habit formation and sensorimotor integration.',
+  'fact': 'It supplies the striatum with information about the world.',
+  'mesh_name': 'Corticostriatal tract (posterior)',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1520},
+ {'name': 'Corticostriatal tract (superior)',
+  'slug': 'corticostriatal-tract-superior',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the motor and premotor cortex to the putamen.',
+  'function': 'Carries motor plans to the striatum for movement selection and motor learning.',
+  'damage_effects': 'Damage can contribute to movement planning problems and bradykinesia.',
+  'fact': 'It is the input to the motor loop of the basal ganglia.',
+  'mesh_name': 'Corticostriatal tract (superior)',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1530},
+ {'name': 'Dentatorubrothalamic tract',
+  'slug': 'dentatorubrothalamic-tract',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the dentate nucleus of the cerebellum through the superior cerebellar peduncle and the '
+              'red nucleus to the ventral lateral thalamus.',
+  'function': 'Main cerebellar output pathway for movement coordination, linking the cerebellum with the '
+              'motor cortex.',
+  'damage_effects': 'Damage causes ipsilateral ataxia and tremor; it is the target for deep brain '
+                    'stimulation for tremor.',
+  'fact': 'Fibres cross in the midbrain (the decussation of the superior cerebellar peduncle).',
+  'mesh_name': 'Dentatorubrothalamic tract',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1540},
+ {'name': 'Frontal aslant tract',
+  'slug': 'frontal-aslant-tract',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Connects the superior frontal gyrus (supplementary motor area) to the inferior frontal gyrus '
+              "(Broca's area).",
+  'function': 'Supports speech initiation, verbal fluency and, on the right, inhibitory control.',
+  'damage_effects': 'Damage after surgery can cause transient speech initiation problems (SMA syndrome).',
+  'fact': 'It was described only in 2012 using diffusion tractography.',
+  'mesh_name': 'Frontal aslant tract',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1550},
+ {'name': 'Inferior cerebellar peduncle',
+  'slug': 'inferior-cerebellar-peduncle',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Connects the medulla and spinal cord with the cerebellum, on the lateral side of the fourth '
+              'ventricle.',
+  'function': 'Carries proprioceptive spinocerebellar input and vestibular and olivary input to the '
+              'cerebellum, and cerebellar output to the vestibular nuclei.',
+  'damage_effects': 'Damage causes ipsilateral ataxia, vertigo and imbalance, as in lateral medullary '
+                    'syndrome.',
+  'fact': 'Also called the restiform body.',
+  'mesh_name': 'Inferior cerebellar peduncle',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1560},
+ {'name': 'Inferior fronto-occipital fasciculus',
+  'slug': 'inferior-fronto-occipital-fasciculus',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Runs from the frontal lobe through the extreme capsule to the occipital and temporal lobes.',
+  'function': 'Supports semantic processing and language comprehension, and links visual areas with '
+              'prefrontal cortex.',
+  'damage_effects': 'Damage causes semantic paraphasias and can impair reading and object recognition.',
+  'fact': 'It is one of the longest association fibre tracts in the brain.',
+  'mesh_name': 'Inferior fronto-occipital fasciculus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1570},
+ {'name': 'Inferior longitudinal fasciculus',
+  'slug': 'inferior-longitudinal-fasciculus',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Runs along the lateral wall of the temporal and occipital lobes, connecting occipital cortex '
+              'with the anterior temporal lobe.',
+  'function': 'Carries visual information to the temporal lobe for object, face and word recognition and '
+              'links vision to emotion and memory.',
+  'damage_effects': 'Damage can cause visual agnosia, prosopagnosia and visual memory deficits.',
+  'fact': "It is part of the ventral visual 'what' pathway.",
+  'mesh_name': 'Inferior longitudinal fasciculus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1580},
+ {'name': 'Medial lemniscus',
+  'slug': 'medial-lemniscus',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the dorsal column nuclei of the medulla crossing the midline and ascending through the '
+              'brainstem to the thalamus.',
+  'function': 'Carries fine touch, vibration and proprioception to the thalamus.',
+  'damage_effects': 'Damage causes contralateral loss of fine touch, vibration and position sense below the '
+                    'lesion.',
+  'fact': 'Fibres cross in the medulla as the internal arcuate fibres.',
+  'mesh_name': 'Medial lemniscus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1590},
+ {'name': 'Middle cerebellar peduncle',
+  'slug': 'middle-cerebellar-peduncle',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Connects the pons to the cerebellum, the largest cerebellar peduncle.',
+  'function': 'Carries the vast majority of input to the cerebellum from the cerebral cortex via the pontine '
+              'nuclei.',
+  'damage_effects': 'Damage causes ipsilateral limb ataxia and balance problems; lesions can occur in '
+                    'multiple system atrophy (hot cross bun sign).',
+  'fact': 'It is the largest of the three cerebellar peduncles, containing roughly 20 million fibres.',
+  'mesh_name': 'Middle cerebellar peduncle',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1600},
+ {'name': 'Middle longitudinal fasciculus',
+  'slug': 'middle-longitudinal-fasciculus',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Runs from the superior temporal gyrus and temporal pole to the parietal and occipital cortex.',
+  'function': 'Supports auditory and language processing and attention.',
+  'damage_effects': 'Its precise functions are still being studied; damage is thought to contribute to '
+                    'language and attention deficits.',
+  'fact': 'It is among the more recently identified association tracts.',
+  'mesh_name': 'Middle longitudinal fasciculus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1610},
+ {'name': 'Optic radiation',
+  'slug': 'optic-radiation',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the lateral geniculate body through the sublenticular internal capsule to the calcarine '
+              "cortex; the lower fibres loop through the temporal lobe (Meyer's loop).",
+  'function': 'Carries visual information from the thalamus to primary visual cortex.',
+  'damage_effects': "Temporal lobe damage affecting Meyer's loop causes a contralateral upper quadrant "
+                    "defect ('pie in the sky'); parietal damage causes a lower quadrant defect ('pie on the "
+                    "floor'); full damage causes homonymous hemianopia.",
+  'fact': "Surgeons try to preserve Meyer's loop during temporal lobe epilepsy surgery.",
+  'mesh_name': 'Optic radiation',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1620},
+ {'name': 'Posterior thalamic radiation',
+  'slug': 'posterior-thalamic-radiation',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the pulvinar and posterior thalamus to the parietal, occipital and temporal cortex.',
+  'function': 'Relays visual and sensory association information to posterior cortex.',
+  'damage_effects': 'Damage can cause visual attention problems and sensory integration deficits.',
+  'fact': 'It includes the optic radiation as a component.',
+  'mesh_name': 'Posterior thalamic radiation',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1630},
+ {'name': 'Reticulospinal tract',
+  'slug': 'reticulospinal-tract',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the pontine and medullary reticular formation down the spinal cord.',
+  'function': 'Modulates posture, muscle tone and automatic movements, and gates pain signals.',
+  'damage_effects': 'Damage can contribute to spasticity and impaired postural control.',
+  'fact': 'It can partly compensate for corticospinal damage after stroke.',
+  'mesh_name': 'Reticulospinal tract',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1640},
+ {'name': 'Superior longitudinal fasciculus I',
+  'slug': 'superior-longitudinal-fasciculus-i',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Connects the superior parietal and medial parietal cortex to the superior frontal cortex '
+              '(dorsal pathway).',
+  'function': 'Supports motor planning, spatial attention and the initiation of movement.',
+  'damage_effects': 'Damage can cause impaired movement planning and spatial neglect.',
+  'fact': 'SLF I is the most dorsal of the three SLF branches.',
+  'mesh_name': 'Superior longitudinal fasciculus I',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1650},
+ {'name': 'Superior longitudinal fasciculus II',
+  'slug': 'superior-longitudinal-fasciculus-ii',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Connects the angular gyrus of the parietal lobe to the middle frontal gyrus (dorsolateral '
+              'prefrontal cortex).',
+  'function': 'Links parietal and prefrontal cortex for visuospatial attention and working memory.',
+  'damage_effects': 'Right-sided damage can cause hemispatial neglect.',
+  'fact': 'SLF II is larger on the right in most people, consistent with spatial attention being '
+          'right-lateralised.',
+  'mesh_name': 'Superior longitudinal fasciculus II',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1660},
+ {'name': 'Superior longitudinal fasciculus III',
+  'slug': 'superior-longitudinal-fasciculus-iii',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Connects the supramarginal gyrus to the inferior frontal gyrus (ventral pathway).',
+  'function': 'Supports language (left side: phonological processing and articulation) and spatial and '
+              'social cognition (right side).',
+  'damage_effects': 'Left-sided damage can cause speech production and repetition deficits; right-sided '
+                    'damage can cause neglect and social cognition problems.',
+  'fact': 'It is the most ventral branch and is closely related to the arcuate fasciculus.',
+  'mesh_name': 'Superior longitudinal fasciculus III',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1670},
+ {'name': 'Superior thalamic radiation',
+  'slug': 'superior-thalamic-radiation',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'From the ventral thalamic nuclei to the motor and sensory cortex through the posterior limb '
+              'of the internal capsule.',
+  'function': 'Relays somatosensory and motor information between thalamus and the central cortex.',
+  'damage_effects': 'Damage causes contralateral sensory loss and movement problems.',
+  'fact': 'It is the sensorimotor part of the thalamic radiations.',
+  'mesh_name': 'Superior thalamic radiation',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1680},
+ {'name': 'Uncinate fasciculus',
+  'slug': 'uncinate-fasciculus',
+  'category': 'structure',
+  'color': '#06B6D4',
+  'location': 'Hooks around the lateral fissure from the anterior temporal lobe and amygdala to the '
+              'orbitofrontal cortex.',
+  'function': 'Links the limbic temporal lobe with prefrontal cortex for emotion, social behaviour and '
+              'memory retrieval.',
+  'damage_effects': 'Damage is linked with semantic memory impairment, emotional and social changes and '
+                    'psychopathic traits.',
+  'fact': 'It is one of the last white matter tracts to finish maturing, continuing to develop into early '
+          'adulthood.',
+  'mesh_name': 'Uncinate fasciculus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1690},
+ {'name': 'Choroid plexus',
+  'slug': 'choroid-plexus',
+  'category': 'structure',
+  'color': '#38BDF8',
+  'location': 'Within the lateral, third and fourth ventricles; most prominent in the lateral ventricle '
+              'trigone.',
+  'function': 'Produces cerebrospinal fluid (about 500 mL per day) and forms part of the blood-CSF barrier.',
+  'damage_effects': 'Tumours (choroid plexus papilloma) or overproduction can cause hydrocephalus; '
+                    'calcification is common with age.',
+  'fact': "The brain's total CSF volume of ~150 mL is replaced several times daily.",
+  'mesh_name': 'Choroid plexus',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1700},
+ {'name': 'Fourth ventricle',
+  'slug': 'fourth-ventricle',
+  'category': 'structure',
+  'color': '#38BDF8',
+  'location': 'Between the brainstem (pons and medulla) and the cerebellum, diamond-shaped.',
+  'function': 'Contains CSF that flows from the aqueduct to the subarachnoid space through the median and '
+              'lateral apertures (foramina of Magendie and Luschka).',
+  'damage_effects': 'Blockage causes obstructive hydrocephalus; tumours such as medulloblastoma and '
+                    'ependymoma often arise here.',
+  'fact': 'Its floor, the rhomboid fossa, contains cranial nerve nuclei.',
+  'mesh_name': 'Fourth ventricle',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1710},
+ {'name': 'Lateral ventricle',
+  'slug': 'lateral-ventricle',
+  'category': 'structure',
+  'color': '#38BDF8',
+  'location': 'Within each cerebral hemisphere, a C-shaped cavity with a frontal horn, body, atrium, '
+              'occipital horn and temporal horn.',
+  'function': 'Holds CSF produced by the choroid plexus and drains through the interventricular foramen into '
+              'the third ventricle.',
+  'damage_effects': 'Enlargement indicates hydrocephalus or brain atrophy; blockage at the foramen of Monro '
+                    'causes unilateral ventricular enlargement.',
+  'fact': 'The lateral ventricles are the largest of the four ventricles.',
+  'mesh_name': 'Lateral ventricle',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 1720},
+ {'name': 'Septum pellucidum',
+  'slug': 'septum-pellucidum',
+  'category': 'structure',
+  'color': '#38BDF8',
+  'location': 'Thin midline membrane between the frontal horns of the lateral ventricles, below the corpus '
+              'callosum.',
+  'function': 'Separates the two lateral ventricles and connects the corpus callosum to the fornix.',
+  'damage_effects': 'Absence or abnormalities are linked to septo-optic dysplasia, holoprosencephaly and '
+                    'some psychiatric conditions.',
+  'fact': 'A cavum septum pellucidum is a common normal variant, found in many newborns.',
+  'mesh_name': 'Septum pellucidum',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1730},
+ {'name': 'Third ventricle',
+  'slug': 'third-ventricle',
+  'category': 'structure',
+  'color': '#38BDF8',
+  'location': 'Narrow midline cavity between the two halves of the thalamus and hypothalamus.',
+  'function': 'Carries CSF from the lateral ventricles to the cerebral aqueduct and relates to the '
+              'hypothalamus and pineal gland.',
+  'damage_effects': 'Colloid cysts can block the foramen of Monro, causing sudden hydrocephalus and '
+                    'headache; tumours here cause hydrocephalus and endocrine changes.',
+  'fact': 'It is crossed by the interthalamic adhesion (massa intermedia) in most people.',
+  'mesh_name': 'Third ventricle',
+  'is_deep': True,
+  'is_midline': True,
+  'sort_order': 1740},
+ {'name': 'Abducens nerve (VI)',
+  'slug': 'abducens-nerve-vi',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Emerges from the pontomedullary junction, runs a long course through the cavernous sinus and '
+              'enters the orbit through the superior orbital fissure.',
+  'function': 'Motor nerve to the lateral rectus muscle, which abducts (turns outward) the eye.',
+  'damage_effects': 'Palsy causes horizontal diplopia and an inability to move the eye outward (esotropia); '
+                    'it has a long course and is often affected by raised intracranial pressure, a '
+                    'false-localising sign.',
+  'fact': 'It has the longest intracranial course of all cranial nerves.',
+  'mesh_name': 'Abducens nerve (VI)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1750},
+ {'name': 'Accessory nerve (XI)',
+  'slug': 'accessory-nerve-xi',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Arises from cranial and spinal roots, ascends through the foramen magnum and leaves the skull '
+              'through the jugular foramen.',
+  'function': 'Motor nerve to the sternocleidomastoid and trapezius muscles, controlling head turning and '
+              'shoulder elevation.',
+  'damage_effects': 'Damage causes shoulder drooping, weakness of shoulder shrug and difficulty turning the '
+                    'head, often after neck surgery or trauma.',
+  'fact': 'It is the only cranial nerve to enter the skull from below, through the foramen magnum.',
+  'mesh_name': 'Accessory nerve (XI)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1760},
+ {'name': 'Anterior division of mandibular nerve',
+  'slug': 'anterior-division-of-mandibular-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Branch of the mandibular nerve (V3) below the foramen ovale in the infratemporal fossa.',
+  'function': 'Mostly motor to the muscles of mastication (masseter, temporalis, lateral pterygoid) with the '
+              'buccal nerve as its sensory branch.',
+  'damage_effects': 'Damage causes weakness of chewing muscles and jaw deviation toward the affected side.',
+  'fact': "It is one of the divisions of the trigeminal nerve's third branch.",
+  'mesh_name': 'Anterior division of mandibular nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1770},
+ {'name': 'Buccal nerve',
+  'slug': 'buccal-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Branch of the anterior division of the mandibular nerve (V3), passing between the heads of '
+              'the lateral pterygoid to the cheek.',
+  'function': 'Sensory nerve to the skin and mucosa of the cheek and part of the gums.',
+  'damage_effects': 'Damage causes numbness of the cheek and gum, e.g., after wisdom tooth surgery.',
+  'fact': 'It is the only sensory branch of the anterior division of V3.',
+  'mesh_name': 'Buccal nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1780},
+ {'name': 'Facial nerve (VII)',
+  'slug': 'facial-nerve-vii',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Emerges from the pontomedullary junction, passes through the internal acoustic meatus and '
+              'facial canal, and leaves through the stylomastoid foramen.',
+  'function': 'Controls facial expression, taste for the front of the tongue, tears and salivation, and the '
+              'stapedius muscle.',
+  'damage_effects': "Damage causes facial droop; Bell's palsy is ipsilateral paralysis of the whole face, "
+                    'whereas central lesions spare the forehead.',
+  'fact': 'It has motor, sensory and parasympathetic components and the longest bony course of any cranial '
+          'nerve.',
+  'mesh_name': 'Facial nerve (VII)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1790},
+ {'name': 'Hypoglossal nerve (XII)',
+  'slug': 'hypoglossal-nerve-xii',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Emerges from the medulla between the pyramid and olive and leaves through the hypoglossal '
+              'canal.',
+  'function': 'Motor nerve to the intrinsic and extrinsic muscles of the tongue.',
+  'damage_effects': 'Damage causes tongue weakness and atrophy; the tongue deviates toward the side of the '
+                    'lesion when protruded.',
+  'fact': 'Its nucleus is a column running the length of the medulla.',
+  'mesh_name': 'Hypoglossal nerve (XII)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1800},
+ {'name': 'Inferior alveolar nerve',
+  'slug': 'inferior-alveolar-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Branch of the posterior division of the mandibular nerve (V3), entering the mandibular '
+              'foramen and running through the mandibular canal.',
+  'function': 'Sensory to the lower teeth and gums, and via the mental nerve to the chin and lower lip; also '
+              'carries motor fibres to the mylohyoid and the anterior belly of digastric.',
+  'damage_effects': 'Damage (e.g., from dental procedures or mandibular fracture) causes numbness of the '
+                    'lower teeth, lip and chin.',
+  'fact': 'Dentists block this nerve to numb the lower teeth.',
+  'mesh_name': 'Inferior alveolar nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1810},
+ {'name': 'Lingual nerve',
+  'slug': 'lingual-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Branch of the posterior division of V3, passing down to the floor of the mouth, close to the '
+              'lower third molar.',
+  'function': 'Sensory to the front two thirds of the tongue (touch and temperature) and floor of the mouth; '
+              'carries taste through the chorda tympani.',
+  'damage_effects': 'Damage, for example during wisdom tooth removal, causes tongue numbness and altered '
+                    'taste.',
+  'fact': 'It is joined by the chorda tympani, a branch of the facial nerve.',
+  'mesh_name': 'Lingual nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1820},
+ {'name': 'Maxillary nerve',
+  'slug': 'maxillary-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Second division of the trigeminal nerve (V2), leaving the skull through the foramen rotundum.',
+  'function': 'Sensory to the mid-face: the cheek, upper lip, upper teeth, nose and palate.',
+  'damage_effects': 'Damage or irritation causes mid-face numbness or neuralgic pain, as in trigeminal '
+                    'neuralgia.',
+  'fact': 'It is purely sensory.',
+  'mesh_name': 'Maxillary nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1830},
+ {'name': 'Meningeal branch of maxillary nerve',
+  'slug': 'meningeal-branch-of-maxillary-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Small branch of V2 arising near the foramen rotundum and supplying the dura of the middle '
+              'cranial fossa.',
+  'function': 'Sensory to the dura mater of the middle cranial fossa.',
+  'damage_effects': 'Irritation of the dura here contributes to headache.',
+  'fact': 'Dural sensation through the trigeminal nerve is a key part of headache pathways.',
+  'mesh_name': 'Meningeal branch of maxillary nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1840},
+ {'name': 'Mental nerve',
+  'slug': 'mental-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Terminal branch of the inferior alveolar nerve, emerging from the mental foramen of the '
+              'mandible.',
+  'function': 'Sensory to the skin of the chin and lower lip.',
+  'damage_effects': 'Damage causes numbness of the chin and lower lip (numb chin syndrome can be a sign of '
+                    'malignancy).',
+  'fact': 'Numb chin syndrome is a warning sign for cancers that spread to the mandible.',
+  'mesh_name': 'Mental nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1850},
+ {'name': 'Motor root of trigeminal nerve',
+  'slug': 'motor-root-of-trigeminal-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Small root of the trigeminal nerve from the pons, passing beneath the trigeminal ganglion '
+              'into V3.',
+  'function': 'Supplies the muscles of mastication, tensor tympani and tensor veli palatini.',
+  'damage_effects': 'Damage causes weakness of chewing and jaw deviation toward the side of the lesion.',
+  'fact': 'It is the only motor part of the trigeminal nerve.',
+  'mesh_name': 'Motor root of trigeminal nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1860},
+ {'name': 'Oculomotor nerve (III)',
+  'slug': 'oculomotor-nerve-iii',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Emerges from the interpeduncular fossa of the midbrain, passes through the cavernous sinus '
+              'and enters the orbit via the superior orbital fissure.',
+  'function': 'Moves the eye (most extraocular muscles), raises the eyelid and constricts the pupil.',
+  'damage_effects': "Palsy causes ptosis, a 'down and out' eye and a dilated pupil; a posterior "
+                    "communicating artery aneurysm can compress it, causing a painful 'blown pupil'.",
+  'fact': 'Pupil-involving third nerve palsy is a neurosurgical emergency.',
+  'mesh_name': 'Oculomotor nerve (III)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1870},
+ {'name': 'Olfactory nerve (I)',
+  'slug': 'olfactory-nerve-i',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Tiny nerves through the cribriform plate of the ethmoid bone to the olfactory bulb in the '
+              'anterior cranial fossa.',
+  'function': 'Sensory nerve of smell.',
+  'damage_effects': 'Damage (e.g., head injury shearing the fibres, infection, tumours) causes loss of smell '
+                    '(anosmia).',
+  'fact': 'Olfactory neurons regenerate throughout life.',
+  'mesh_name': 'Olfactory nerve (I)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1880},
+ {'name': 'Ophthalmic nerve',
+  'slug': 'ophthalmic-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'First division of the trigeminal nerve (V1), passing through the superior orbital fissure.',
+  'function': 'Sensory to the forehead, scalp, upper eyelid, cornea and nose.',
+  'damage_effects': 'Damage causes loss of corneal reflex and forehead numbness; shingles (herpes zoster '
+                    'ophthalmicus) commonly involves it.',
+  'fact': 'It carries the afferent limb of the corneal blink reflex.',
+  'mesh_name': 'Ophthalmic nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1890},
+ {'name': 'Optic nerve (II)',
+  'slug': 'optic-nerve-ii',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'From the retina through the optic canal to the optic chiasm.',
+  'function': 'Sensory nerve of vision, carrying signals from the retina to the brain.',
+  'damage_effects': 'Damage causes monocular vision loss, a relative afferent pupillary defect and reduced '
+                    'colour vision; optic neuritis occurs in multiple sclerosis.',
+  'fact': 'Technically a brain tract, it is covered with meninges and surrounded by CSF.',
+  'mesh_name': 'Optic nerve (II)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1900},
+ {'name': 'Posterior division of mandibular nerve',
+  'slug': 'posterior-division-of-mandibular-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Branch of the mandibular nerve (V3) that divides into the auriculotemporal, lingual and '
+              'inferior alveolar nerves.',
+  'function': 'Mainly sensory to the ear region, tongue and lower teeth.',
+  'damage_effects': 'Damage causes numbness in the lower jaw, tongue and temple area.',
+  'fact': 'It carries sensation for the temporomandibular joint.',
+  'mesh_name': 'Posterior division of mandibular nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1910},
+ {'name': 'Sensory root of trigeminal nerve',
+  'slug': 'sensory-root-of-trigeminal-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Large root of the trigeminal nerve from the pons to the trigeminal (Gasserian) ganglion in '
+              "Meckel's cave.",
+  'function': 'Carries touch, pain and temperature from the face to the brainstem trigeminal nuclei.',
+  'damage_effects': 'Compression by a vessel at the root entry zone is the classic cause of trigeminal '
+                    'neuralgia: severe, shock-like facial pain.',
+  'fact': 'Microvascular decompression surgery treats trigeminal neuralgia by moving the compressing artery.',
+  'mesh_name': 'Sensory root of trigeminal nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1920},
+ {'name': 'Trigeminal nerve (V)',
+  'slug': 'trigeminal-nerve-v',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Arises from the lateral pons and divides into ophthalmic (V1), maxillary (V2) and mandibular '
+              '(V3) branches.',
+  'function': 'Provides sensation to the face, scalp, mouth and teeth, and motor control of the chewing '
+              'muscles.',
+  'damage_effects': 'Damage causes facial numbness, loss of corneal reflex and weak chewing; irritation '
+                    'causes trigeminal neuralgia.',
+  'fact': 'It is the largest cranial nerve.',
+  'mesh_name': 'Trigeminal nerve (V)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1930},
+ {'name': 'Trochlear nerve (IV)',
+  'slug': 'trochlear-nerve-iv',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Emerges from the dorsal midbrain below the inferior colliculus, wraps around the brainstem '
+              'and enters the orbit through the superior orbital fissure.',
+  'function': 'Motor nerve to the superior oblique muscle, which turns the eye down and in.',
+  'damage_effects': 'Palsy causes vertical diplopia, especially looking down (e.g., reading or going '
+                    'downstairs), with a compensatory head tilt away from the affected side.',
+  'fact': 'It is the only cranial nerve to exit from the dorsal brainstem, and the thinnest.',
+  'mesh_name': 'Trochlear nerve (IV)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1940},
+ {'name': 'Vagus nerve (X)',
+  'slug': 'vagus-nerve-x',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Emerges from the medulla and leaves the skull through the jugular foramen; descends through '
+              'the neck and thorax to the abdomen.',
+  'function': 'Parasympathetic control of the heart, lungs and gut; motor to the pharynx and larynx; sensory '
+              'from the viscera and part of the ear.',
+  'damage_effects': 'Damage causes hoarseness, difficulty swallowing, palate deviation and autonomic '
+                    'disturbances; vagal overactivity can cause fainting.',
+  'fact': "Its name means 'wandering' in Latin because it reaches so many organs.",
+  'mesh_name': 'Vagus nerve (X)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1950},
+ {'name': 'Vestibular nerve',
+  'slug': 'vestibular-nerve',
+  'category': 'structure',
+  'color': '#EAB308',
+  'location': 'Part of the vestibulocochlear nerve (VIII), from the vestibular ganglion to the vestibular '
+              'nuclei in the brainstem, through the internal acoustic meatus.',
+  'function': 'Carries balance and head-position information from the semicircular canals and otolith '
+              'organs.',
+  'damage_effects': 'Damage causes vertigo, nystagmus and imbalance; vestibular schwannoma (acoustic '
+                    'neuroma) often arises from it.',
+  'fact': 'Vestibular neuritis is a common cause of sudden severe vertigo.',
+  'mesh_name': 'Vestibular nerve',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1960},
+ {'name': 'Anterior cerebral artery',
+  'slug': 'anterior-cerebral-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Branch of the internal carotid artery, running along the medial surface of the frontal and '
+              'parietal lobes above the corpus callosum.',
+  'function': 'Supplies the medial frontal and parietal lobes, including the leg and foot areas of the motor '
+              'and sensory cortex.',
+  'damage_effects': 'Stroke causes contralateral leg weakness and sensory loss, with abulia and urinary '
+                    'incontinence.',
+  'fact': 'Both anterior cerebral arteries are linked by the anterior communicating artery.',
+  'mesh_name': 'Anterior cerebral artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1970},
+ {'name': 'Anterior communicating artery',
+  'slug': 'anterior-communicating-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Short midline artery linking the two anterior cerebral arteries at the front of the circle of '
+              'Willis.',
+  'function': 'Allows blood to flow between the left and right anterior circulation.',
+  'damage_effects': 'It is the most common site of intracranial aneurysm; rupture causes subarachnoid '
+                    'haemorrhage and may cause memory and personality change.',
+  'fact': 'Aneurysms here are among the most frequent causes of subarachnoid haemorrhage.',
+  'mesh_name': 'Anterior communicating artery',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 1980},
+ {'name': 'Anterior inferior cerebellar artery',
+  'slug': 'anterior-inferior-cerebellar-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Branch of the basilar artery near the pontomedullary junction, passing to the '
+              'cerebellopontine angle.',
+  'function': 'Supplies the inferior and lateral pons, the anterior part of the cerebellum and the inner ear '
+              'via the labyrinthine artery.',
+  'damage_effects': 'Occlusion causes vertigo, hearing loss, facial weakness and ipsilateral ataxia (lateral '
+                    'pontine syndrome).',
+  'fact': 'The labyrinthine artery usually arises from it, so occlusion can cause sudden deafness.',
+  'mesh_name': 'Anterior inferior cerebellar artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 1990},
+ {'name': 'Anterior spinal artery',
+  'slug': 'anterior-spinal-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Forms at the junction of branches of the vertebral arteries, descending in front of the '
+              'medulla and spinal cord.',
+  'function': 'Supplies the anterior two thirds of the spinal cord and the medial medulla.',
+  'damage_effects': 'Occlusion causes anterior spinal artery syndrome with loss of motor function and pain '
+                    'and temperature sensation below the lesion; medullary involvement causes medial '
+                    'medullary syndrome.',
+  'fact': 'The artery of Adamkiewicz is its largest feeder.',
+  'mesh_name': 'Anterior spinal artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2000},
+ {'name': 'Basilar artery',
+  'slug': 'basilar-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Forms from the two vertebral arteries at the pontomedullary junction and ascends in front of '
+              'the pons.',
+  'function': 'Supplies the pons, cerebellum, midbrain and, via the posterior cerebral arteries, the '
+              'occipital lobes and thalamus.',
+  'damage_effects': "Occlusion can cause locked-in syndrome, coma, vertigo and visual loss; 'top of the "
+                    "basilar' syndrome causes visual, oculomotor and consciousness disturbances.",
+  'fact': 'Basilar artery occlusion is among the most dangerous strokes, with high mortality.',
+  'mesh_name': 'Basilar artery',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2010},
+ {'name': 'Callosomarginal artery',
+  'slug': 'callosomarginal-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Branch of the anterior cerebral artery running in the cingulate sulcus above the cingulate '
+              'gyrus.',
+  'function': 'Supplies the medial surface of the frontal lobe and the cingulate gyrus.',
+  'damage_effects': 'Occlusion causes weakness of the opposite leg and abulia or akinetic mutism.',
+  'fact': 'It runs alongside the pericallosal artery.',
+  'mesh_name': 'Callosomarginal artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2020},
+ {'name': 'Distal lateral striate branches',
+  'slug': 'distal-lateral-striate-branches',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Small perforating branches from the distal middle cerebral artery M1 segment, supplying deep '
+              'structures.',
+  'function': 'Supply parts of the basal ganglia and internal capsule.',
+  'damage_effects': 'Occlusion causes lacunar infarcts with pure motor or sensory deficits; rupture causes '
+                    'basal ganglia haemorrhage.',
+  'fact': 'They are end arteries with little collateral flow.',
+  'mesh_name': 'Distal lateral striate branches',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 2030},
+ {'name': 'Frontal branches of callosomarginal artery',
+  'slug': 'frontal-branches-of-callosomarginal-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Cortical branches of the callosomarginal artery on the medial surface of the frontal lobe.',
+  'function': 'Supply the medial superior frontal gyrus and part of the paracentral region.',
+  'damage_effects': 'Occlusion causes contralateral leg weakness and frontal lobe symptoms such as abulia.',
+  'fact': 'They contribute to the medial watershed with the middle cerebral artery.',
+  'mesh_name': 'Frontal branches of callosomarginal artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2040},
+ {'name': 'Insular branches of middle cerebral artery (M2-segment)',
+  'slug': 'insular-branches-of-mca-m2-segment',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'M2 branches of the middle cerebral artery running over the insula within the lateral fissure.',
+  'function': 'Supply the insula and adjoining opercula, which are part of the frontal, parietal and '
+              'temporal lobes.',
+  'damage_effects': 'Occlusion can cause aphasia, facial weakness and sensory loss; insular damage may '
+                    'affect taste and swallowing.',
+  'fact': "The 'insular ribbon sign' on CT is an early sign of middle cerebral artery stroke.",
+  'mesh_name': 'Insular branches of middle cerebral artery (M2)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2050},
+ {'name': 'Internal carotid artery',
+  'slug': 'internal-carotid-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Ascends in the neck, passes through the carotid canal and cavernous sinus, and ends by '
+              'dividing into the anterior and middle cerebral arteries.',
+  'function': 'Supplies the anterior part of the brain, the eye (via the ophthalmic artery) and parts of the '
+              'pituitary.',
+  'damage_effects': 'Occlusion or embolism causes stroke, including amaurosis fugax (transient monocular '
+                    'blindness) and contralateral weakness and aphasia.',
+  'fact': 'Carotid endarterectomy removes plaque to prevent stroke.',
+  'mesh_name': 'Internal carotid artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2060},
+ {'name': 'Lateral pontine branches of basilar artery',
+  'slug': 'lateral-pontine-branches-of-basilar-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Short circumferential branches of the basilar artery wrapping around the lateral pons.',
+  'function': 'Supply the lateral pons, including the middle cerebellar peduncle.',
+  'damage_effects': 'Occlusion causes lateral pontine syndrome with ataxia, facial weakness and sensory '
+                    'loss.',
+  'fact': 'They are small but vulnerable to hypertensive vascular disease.',
+  'mesh_name': 'Lateral pontine branches of basilar artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2070},
+ {'name': 'Medial pontine branches of basilar artery',
+  'slug': 'medial-pontine-branches-of-basilar-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Paramedian perforating branches arising from the basilar artery and entering the pons along '
+              'the midline.',
+  'function': 'Supply the medial pons, including the corticospinal tracts and abducens nucleus region.',
+  'damage_effects': 'Occlusion causes medial pontine syndrome: contralateral hemiparesis and ipsilateral '
+                    'gaze palsy; bilateral occlusion causes locked-in syndrome.',
+  'fact': 'They are end arteries and the pons is vulnerable to small-vessel strokes.',
+  'mesh_name': 'Medial pontine branches of basilar artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2080},
+ {'name': 'Middle cerebral artery (M1-segment)',
+  'slug': 'middle-cerebral-artery-m1-segment',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Horizontal first segment of the MCA, arising from the internal carotid artery and running '
+              'laterally to the lateral fissure.',
+  'function': 'Gives off the lenticulostriate arteries to the basal ganglia and internal capsule.',
+  'damage_effects': 'Occlusion causes contralateral hemiplegia, sensory loss and aphasia (left) or neglect '
+                    '(right); it is the most common site of stroke.',
+  'fact': "The 'hyperdense MCA sign' on CT reveals a clot in this segment.",
+  'mesh_name': 'Middle cerebral artery (M1-segment)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2090},
+ {'name': 'Middle cerebral artery (M3-segment)',
+  'slug': 'middle-cerebral-artery-m3-segment',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Opercular segment of the MCA, running over the surface of the opercula on the lateral '
+              'surface.',
+  'function': 'Supplies the lateral cortex of the frontal, parietal and temporal lobes, including language '
+              'and sensorimotor areas.',
+  'damage_effects': 'Occlusion causes aphasia (left) or neglect (right) and contralateral face and arm '
+                    'weakness or sensory loss.',
+  'fact': 'M3 vessels lie at the surface of the insula and emerge on the lateral convexity.',
+  'mesh_name': 'Middle cerebral artery (M3 segment)',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2100},
+ {'name': 'Ophthalmic artery',
+  'slug': 'ophthalmic-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'First branch of the internal carotid artery after the cavernous sinus, passing through the '
+              'optic canal with the optic nerve.',
+  'function': 'Supplies the eye, orbit and parts of the forehead and nose.',
+  'damage_effects': 'Occlusion causes sudden monocular vision loss, such as central retinal artery '
+                    'occlusion.',
+  'fact': 'Its central retinal branch is the only blood supply to the inner retina.',
+  'mesh_name': 'Ophthalmic artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2110},
+ {'name': 'Orbitofrontal branches of anterior cerebral artery',
+  'slug': 'orbitofrontal-branches-of-anterior-cerebral-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Branches of the anterior cerebral artery supplying the orbital surface of the frontal lobe.',
+  'function': 'Supply the orbitofrontal cortex and gyrus rectus.',
+  'damage_effects': 'Occlusion can cause disinhibition, personality changes and loss of smell.',
+  'fact': 'They are damaged in some anterior communicating artery aneurysm repairs.',
+  'mesh_name': 'Orbitofrontal branches of anterior cerebral artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2120},
+ {'name': 'Parietal branches of middle cerebral artery',
+  'slug': 'parietal-branches-of-middle-cerebral-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Cortical branches of the MCA supplying the lateral parietal lobe, including the postcentral '
+              'and posterior parietal regions.',
+  'function': 'Supply the somatosensory cortex, supramarginal and angular gyri.',
+  'damage_effects': 'Occlusion causes contralateral sensory loss, neglect (right) or Gerstmann syndrome and '
+                    'aphasia (left).',
+  'fact': 'The angular branch supplies the border zone with the posterior cerebral artery.',
+  'mesh_name': 'Parietal branches of middle cerebral artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2130},
+ {'name': 'Pericallosal artery',
+  'slug': 'pericallosal-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Continuation of the anterior cerebral artery running along the upper surface of the corpus '
+              'callosum.',
+  'function': 'Supplies the corpus callosum and the medial parietal lobe.',
+  'damage_effects': 'Occlusion can cause callosal disconnection syndromes and contralateral leg weakness.',
+  'fact': 'Distal pericallosal aneurysms are a rare but known cause of subarachnoid haemorrhage.',
+  'mesh_name': 'Pericallosal artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2140},
+ {'name': 'Posterior cerebral artery',
+  'slug': 'posterior-cerebral-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Terminal branch of the basilar artery, curving around the midbrain to the occipital lobe and '
+              'inferior temporal lobe.',
+  'function': 'Supplies the occipital lobe, inferior temporal lobe, thalamus and midbrain.',
+  'damage_effects': 'Occlusion causes contralateral homonymous hemianopia with macular sparing, alexia '
+                    'without agraphia, memory loss and thalamic pain syndrome.',
+  'fact': 'Macular sparing may occur because the occipital pole also receives blood from the middle cerebral '
+          'artery.',
+  'mesh_name': 'Posterior cerebral artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2150},
+ {'name': 'Posterior communicating artery',
+  'slug': 'posterior-communicating-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Links the internal carotid artery to the posterior cerebral artery on each side of the circle '
+              'of Willis.',
+  'function': 'Connects the anterior and posterior circulations.',
+  'damage_effects': 'Aneurysms can compress the oculomotor nerve, causing painful ptosis and a dilated '
+                    'pupil.',
+  'fact': 'It is the second most common site of intracranial aneurysm.',
+  'mesh_name': 'Posterior communicating artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2160},
+ {'name': 'Posterior inferior cerebellar artery',
+  'slug': 'posterior-inferior-cerebellar-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Branch of the vertebral artery, passing around the medulla to the underside of the '
+              'cerebellum.',
+  'function': 'Supplies the lateral medulla and the inferior cerebellum.',
+  'damage_effects': 'Occlusion causes lateral medullary (Wallenberg) syndrome: vertigo, dysphagia, '
+                    'hoarseness, ipsilateral facial and contralateral body pain and temperature loss.',
+  'fact': 'Medullary stroke from PICA occlusion is a classic exam case.',
+  'mesh_name': 'Posterior inferior cerebellar artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2170},
+ {'name': 'Proximal lateral striate branches',
+  'slug': 'proximal-lateral-striate-branches',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Small perforating branches of the proximal middle cerebral artery (M1 segment), entering the '
+              'anterior perforated substance.',
+  'function': 'Supply the putamen, globus pallidus, head of the caudate and the internal capsule.',
+  'damage_effects': 'Occlusion causes lacunar infarcts with hemiparesis; rupture causes basal ganglia '
+                    'haemorrhage.',
+  'fact': "Charcot called them the 'arteries of cerebral haemorrhage'.",
+  'mesh_name': 'Proximal lateral striate branches',
+  'is_deep': True,
+  'is_midline': False,
+  'sort_order': 2180},
+ {'name': 'Superior cerebellar artery',
+  'slug': 'superior-cerebellar-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Branch of the basilar artery just below the posterior cerebral artery, curving around the '
+              'midbrain.',
+  'function': 'Supplies the superior cerebellum, dentate nucleus and upper lateral pons.',
+  'damage_effects': 'Occlusion causes ipsilateral ataxia, dysarthria and vertigo with contralateral pain and '
+                    'temperature loss.',
+  'fact': 'The oculomotor nerve passes between the superior cerebellar and posterior cerebral arteries.',
+  'mesh_name': 'Superior cerebellar artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2190},
+ {'name': 'Temporal branches of middle cerebral artery',
+  'slug': 'temporal-branches-of-middle-cerebral-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Cortical branches of the MCA supplying the lateral temporal lobe.',
+  'function': 'Supply the superior and middle temporal gyri, including auditory and language areas.',
+  'damage_effects': "Occlusion causes Wernicke's aphasia (left) or impaired auditory and emotional "
+                    'processing (right).',
+  'fact': "The posterior temporal branch supplies Wernicke's area.",
+  'mesh_name': 'Temporal branches of middle cerebral artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2200},
+ {'name': 'Vertebral artery',
+  'slug': 'vertebral-artery',
+  'category': 'structure',
+  'color': '#DC2626',
+  'location': 'Arises from the subclavian artery, ascends through the transverse foramina of the cervical '
+              'vertebrae and enters the skull via the foramen magnum.',
+  'function': 'Supplies the posterior fossa and unites with its partner to form the basilar artery.',
+  'damage_effects': 'Dissection or occlusion causes posterior circulation stroke: vertigo, ataxia, visual '
+                    'loss and Wallenberg syndrome; neck manipulation is a rare cause of dissection.',
+  'fact': 'Both vertebral arteries join at the pontomedullary junction.',
+  'mesh_name': 'Vertebral artery',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2210},
+ {'name': 'Anterior intercavernous sinus',
+  'slug': 'anterior-intercavernous-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Small channel connecting the two cavernous sinuses across the front of the pituitary gland.',
+  'function': 'Allows blood to flow between the left and right cavernous sinuses.',
+  'damage_effects': 'Infection or thrombosis can spread across the midline, causing bilateral cavernous '
+                    'sinus syndrome.',
+  'fact': 'Together with the posterior one it forms the circular sinus around the pituitary.',
+  'mesh_name': 'Anterior intercavernous sinus',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2220},
+ {'name': 'Basilar venous plexus',
+  'slug': 'basilar-venous-plexus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Network of veins on the clivus of the skull base, behind the dorsum sellae.',
+  'function': 'Connects the cavernous and petrosal sinuses with the vertebral venous plexuses.',
+  'damage_effects': 'It provides a path for the spread of infection or tumour between the skull base and '
+                    'spine.',
+  'fact': 'It lacks valves, so blood can flow in either direction.',
+  'mesh_name': 'Basilar venous plexus',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2230},
+ {'name': 'Cavernous sinus',
+  'slug': 'cavernous-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Paired venous channel on either side of the sella turcica, containing the internal carotid '
+              'artery and cranial nerves III, IV, V1, V2 and VI.',
+  'function': 'Drains the orbit and part of the brain into the petrosal sinuses.',
+  'damage_effects': 'Thrombosis or infection from the face causes painful ophthalmoplegia, proptosis and '
+                    'eyelid swelling; a carotid-cavernous fistula causes a pulsating bulging eye.',
+  'fact': "Infection from the 'danger triangle' of the face can reach it through the facial veins.",
+  'mesh_name': 'Cavernous sinus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2240},
+ {'name': 'Inferior petrosal sinus',
+  'slug': 'inferior-petrosal-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Runs along the groove between the petrous temporal bone and the occipital bone, from the '
+              'cavernous sinus to the jugular bulb.',
+  'function': 'Drains the cavernous sinus into the internal jugular vein.',
+  'damage_effects': 'Thrombosis can contribute to cranial nerve palsies; sampling from it is used to '
+                    'diagnose pituitary ACTH-secreting tumours.',
+  'fact': "Inferior petrosal sinus sampling is the gold standard for localising Cushing's disease.",
+  'mesh_name': 'Inferior petrosal sinus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2250},
+ {'name': 'Inferior sagittal sinus',
+  'slug': 'inferior-sagittal-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Runs along the lower free edge of the falx cerebri.',
+  'function': 'Drains the medial surfaces of the hemispheres into the straight sinus.',
+  'damage_effects': 'Thrombosis is rare but can cause venous congestion.',
+  'fact': 'It joins the vein of Galen to form the straight sinus.',
+  'mesh_name': 'Inferior sagittal sinus',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2260},
+ {'name': 'Occipital sinus',
+  'slug': 'occipital-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Smallest dural sinus, running in the attached margin of the falx cerebelli to the confluence '
+              'of sinuses.',
+  'function': 'Drains the posterior fossa into the confluence of sinuses.',
+  'damage_effects': 'Can be involved in posterior fossa venous thrombosis.',
+  'fact': 'It is often absent or very small.',
+  'mesh_name': 'Occipital sinus',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2270},
+ {'name': 'Posterior intercavernous sinus',
+  'slug': 'posterior-intercavernous-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Small channel connecting the cavernous sinuses behind the pituitary gland.',
+  'function': 'Allows blood to flow between the cavernous sinuses.',
+  'damage_effects': 'Spread of infection can cause bilateral cavernous sinus syndrome.',
+  'fact': 'Together with the anterior intercavernous sinus it forms a ring around the pituitary.',
+  'mesh_name': 'Posterior intercavernous sinus',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2280},
+ {'name': 'Sigmoid sinus',
+  'slug': 'sigmoid-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'S-shaped continuation of the transverse sinus, running along the inner surface of the mastoid '
+              'portion of the temporal bone to the jugular foramen.',
+  'function': 'Carries blood from the transverse sinus to the internal jugular vein.',
+  'damage_effects': 'Thrombosis after mastoid or ear infection causes headache, papilloedema and raised '
+                    'intracranial pressure.',
+  'fact': 'It lies close to the mastoid air cells, which is why ear infections can spread to it.',
+  'mesh_name': 'Sigmoid sinus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2290},
+ {'name': 'Straight sinus',
+  'slug': 'straight-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Runs along the junction of the falx cerebri and the tentorium cerebelli to the confluence of '
+              'sinuses.',
+  'function': 'Drains the deep cerebral veins (the vein of Galen) and the inferior sagittal sinus.',
+  'damage_effects': 'Thrombosis causes deep venous infarction of the thalami with coma and raised pressure.',
+  'fact': 'It contains no valves and is easily visible on MR venography.',
+  'mesh_name': 'Straight sinus',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2300},
+ {'name': 'Superior petrosal sinus',
+  'slug': 'superior-petrosal-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Runs along the upper edge of the petrous temporal bone from the cavernous sinus to the '
+              'transverse-sigmoid junction.',
+  'function': 'Drains the cavernous sinus into the transverse sinus.',
+  'damage_effects': 'Thrombosis can cause trigeminal and abducens symptoms due to proximity to the cranial '
+                    'nerves.',
+  'fact': 'The trigeminal nerve passes beneath it.',
+  'mesh_name': 'Superior petrosal sinus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2310},
+ {'name': 'Superior sagittal sinus',
+  'slug': 'superior-sagittal-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Runs along the upper edge of the falx cerebri, from the frontal bone to the occipital '
+              'protuberance.',
+  'function': 'Drains the cerebral hemispheres and receives cerebrospinal fluid through arachnoid '
+              'granulations.',
+  'damage_effects': 'Thrombosis causes headache, seizures, venous infarction and raised intracranial '
+                    'pressure.',
+  'fact': 'It is the largest dural venous sinus.',
+  'mesh_name': 'Superior sagittal sinus',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2320},
+ {'name': 'Transverse sinus',
+  'slug': 'transverse-sinus',
+  'category': 'structure',
+  'color': '#1D4ED8',
+  'location': 'Runs along the attached margin of the tentorium cerebelli, from the confluence of sinuses to '
+              'the sigmoid sinus; usually larger on the right.',
+  'function': 'Drains blood from the superior sagittal and straight sinuses toward the internal jugular '
+              'vein.',
+  'damage_effects': 'Thrombosis causes raised intracranial pressure, headache and papilloedema; hypoplasia '
+                    'of one side is common.',
+  'fact': 'The right transverse sinus is usually dominant.',
+  'mesh_name': 'Transverse sinus',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2330},
+ {'name': 'Falx cerebri',
+  'slug': 'falx-cerebri',
+  'category': 'structure',
+  'color': '#A3A3A3',
+  'location': 'Midline sickle-shaped fold of dura mater in the longitudinal fissure between the cerebral '
+              'hemispheres.',
+  'function': 'Separates the hemispheres, anchors the brain and carries the superior and inferior sagittal '
+              'sinuses.',
+  'damage_effects': 'Mass effect can cause subfalcine herniation, compressing the anterior cerebral artery; '
+                    'falcine meningiomas affect the leg area of the motor cortex.',
+  'fact': "Its name comes from the Latin for 'sickle'.",
+  'mesh_name': 'Falx cerebri',
+  'is_deep': False,
+  'is_midline': True,
+  'sort_order': 2340},
+ {'name': 'Tentorium cerebelli',
+  'slug': 'tentorium-cerebelli',
+  'category': 'structure',
+  'color': '#A3A3A3',
+  'location': 'Tent-like fold of dura mater separating the occipital lobes from the cerebellum and enclosing '
+              'the posterior fossa.',
+  'function': 'Supports the occipital lobes, shields the cerebellum and carries the transverse and straight '
+              'sinuses.',
+  'damage_effects': 'Mass effect above the tentorium can cause uncal herniation, compressing the oculomotor '
+                    'nerve and midbrain, causing a blown pupil and coma.',
+  'fact': 'The gap in the tentorium, the incisura, is where herniation squeezes the midbrain.',
+  'mesh_name': 'Tentorium cerebelli',
+  'is_deep': False,
+  'is_midline': False,
+  'sort_order': 2350}]
 
 
-BRAIN_PARTS = [
-    {
-        "name": "Frontal Lobe",
-        "slug": "frontal-lobe",
-        "category": "lobe",
-        "color": "#F97316",
-        "location": (
-            "The frontal lobe occupies the anterior portion of the cerebral "
-            "hemisphere, extending from the frontal pole to the central sulcus. "
-            "It lies above the lateral sulcus."
-        ),
-        "function": (
-            "Responsible for executive functions such as planning, reasoning, "
-            "decision-making, problem-solving, impulse control, and aspects of "
-            "personality. It also contains important motor and language-related "
-            "areas, including the primary motor cortex and, in most people, "
-            "Broca's area."
-        ),
-        "damage_effects": (
-            "Damage may cause changes in personality, impaired judgment, "
-            "difficulty planning and organizing, reduced impulse control, "
-            "emotional changes, weakness or paralysis depending on the affected "
-            "motor region, and difficulty producing speech if language-related "
-            "areas are involved."
-        ),
-        "fact": (
-            "The frontal lobe is one of the last brain regions to complete "
-            "its development, with maturation continuing into early adulthood."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 1,
-    },
-    {
-        "name": "Parietal Lobe",
-        "slug": "parietal-lobe",
-        "category": "lobe",
-        "color": "#EAB308",
-        "location": (
-            "Located in the upper rear portion of each cerebral hemisphere, "
-            "behind the central sulcus and above the lateral sulcus. It extends "
-            "toward the occipital lobe."
-        ),
-        "function": (
-            "Integrates sensory information from different parts of the body. "
-            "It contributes to touch perception, body awareness, spatial "
-            "orientation, attention, and the processing of information about "
-            "the position and movement of body parts."
-        ),
-        "damage_effects": (
-            "Damage may cause impaired sensation, difficulty recognizing "
-            "objects through touch, spatial disorientation, difficulty attending "
-            "to one side of space, or problems with coordinated movements. "
-            "Damage to the right parietal lobe can cause left-sided spatial neglect."
-        ),
-        "fact": (
-            "The parietal lobe helps construct an internal representation "
-            "of where the body is located in surrounding space."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 2,
-    },
-    {
-        "name": "Temporal Lobe",
-        "slug": "temporal-lobe",
-        "category": "lobe",
-        "color": "#A78BFA",
-        "location": (
-            "Located on the lateral sides of the cerebral hemispheres, "
-            "below the lateral sulcus and beneath portions of the frontal "
-            "and parietal lobes."
-        ),
-        "function": (
-            "Involved in auditory processing, language comprehension, "
-            "memory formation, recognition of objects and faces, and "
-            "aspects of emotion. Its medial regions contain important "
-            "memory-related structures, including the hippocampus."
-        ),
-        "damage_effects": (
-            "Damage may cause difficulty understanding spoken language, "
-            "memory impairment, problems recognizing familiar objects or "
-            "faces, auditory processing difficulties, or changes in emotional "
-            "responses, depending on the affected region."
-        ),
-        "fact": (
-            "The medial temporal lobe contains the hippocampus, a structure "
-            "essential for forming many types of new declarative memories."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 3,
-    },
-    {
-        "name": "Occipital Lobe",
-        "slug": "occipital-lobe",
-        "category": "lobe",
-        "color": "#22C55E",
-        "location": (
-            "Located at the posterior end of the cerebral hemispheres. "
-            "It lies behind the parietal and temporal lobes and contains "
-            "the primary visual cortex."
-        ),
-        "function": (
-            "Primarily responsible for processing visual information. "
-            "Different areas analyze visual features such as edges, "
-            "orientation, color, motion, and spatial characteristics."
-        ),
-        "damage_effects": (
-            "Damage may cause visual field defects, difficulty processing "
-            "visual information, visual recognition problems, or cortical "
-            "blindness in severe cases involving both hemispheres."
-        ),
-        "fact": (
-            "The primary visual cortex is located around the calcarine sulcus "
-            "on the medial surface of the occipital lobe."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 4,
-    },
-    {
-        "name": "Motor Cortex",
-        "slug": "motor-cortex",
-        "category": "cortex",
-        "color": "#EF4444",
-        "location": (
-            "The primary motor cortex is located in the precentral gyrus "
-            "of the frontal lobe, immediately anterior to the central sulcus."
-        ),
-        "function": (
-            "Generates neural commands involved in voluntary movement. "
-            "Different portions of the motor cortex contribute to controlling "
-            "movements of different body regions. Each hemisphere primarily "
-            "controls the opposite side of the body."
-        ),
-        "damage_effects": (
-            "Damage may cause weakness or paralysis on the opposite side "
-            "of the body, depending on the location and extent of the injury. "
-            "Fine motor control and coordinated voluntary movement may also "
-            "be affected."
-        ),
-        "fact": (
-            "The motor homunculus is a representation of body parts across "
-            "the motor cortex. Body regions requiring precise movement "
-            "receive disproportionately large cortical representations."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 5,
-    },
-    {
-        "name": "Somatosensory Cortex",
-        "slug": "somatosensory-cortex",
-        "category": "cortex",
-        "color": "#06B6D4",
-        "location": (
-            "The primary somatosensory cortex is located in the postcentral "
-            "gyrus of the parietal lobe, immediately posterior to the "
-            "central sulcus."
-        ),
-        "function": (
-            "Processes sensory information from the body, including touch, "
-            "pressure, vibration, pain, temperature, and proprioception. "
-            "It contributes to awareness of bodily sensations."
-        ),
-        "damage_effects": (
-            "Damage may cause reduced or altered sensation on the opposite "
-            "side of the body, difficulty identifying objects through touch, "
-            "and impaired awareness of body position."
-        ),
-        "fact": (
-            "The somatosensory homunculus represents the body across the "
-            "cortex, with sensitive areas such as the hands and lips "
-            "occupying relatively large cortical regions."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 6,
-    },
-    {
-        "name": "Broca's Area",
-        "slug": "brocas-area",
-        "category": "cortex",
-        "color": "#F472B6",
-        "location": (
-            "Typically located in the inferior frontal gyrus of the "
-            "dominant cerebral hemisphere, most often the left hemisphere. "
-            "It includes portions of the pars opercularis and pars triangularis."
-        ),
-        "function": (
-            "Contributes to speech production, language planning, and "
-            "the organization of speech-related movements. It works "
-            "together with a wider network of language regions."
-        ),
-        "damage_effects": (
-            "Damage may result in Broca's aphasia, characterized by "
-            "effortful and reduced speech production. Comprehension of "
-            "simple sentences may remain relatively preserved, although "
-            "complex grammatical comprehension can also be affected."
-        ),
-        "fact": (
-            "Broca's area is named after physician Paul Broca, who studied "
-            "patients with language production difficulties."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 7,
-    },
-    {
-        "name": "Wernicke's Area",
-        "slug": "wernickes-area",
-        "category": "cortex",
-        "color": "#C084FC",
-        "location": (
-            "Classically associated with the posterior superior temporal "
-            "region of the dominant hemisphere, usually the left. Language "
-            "comprehension involves a broader distributed network."
-        ),
-        "function": (
-            "Contributes to understanding spoken and written language, "
-            "accessing word meanings, and integrating linguistic information."
-        ),
-        "damage_effects": (
-            "Damage in the relevant language network may cause Wernicke's "
-            "aphasia, characterized by fluent but often poorly meaningful "
-            "speech and impaired language comprehension."
-        ),
-        "fact": (
-            "Modern neuroscience views language comprehension as a network "
-            "function rather than the responsibility of one isolated region."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 8,
-    },
-    {
-        "name": "Auditory Cortex",
-        "slug": "auditory-cortex",
-        "category": "cortex",
-        "color": "#38BDF8",
-        "location": (
-            "Located primarily in the superior temporal plane, including "
-            "the transverse temporal gyri, also known as Heschl's gyri."
-        ),
-        "function": (
-            "Processes sound information such as frequency, intensity, "
-            "timing, and sound patterns. It contributes to the perception "
-            "and interpretation of auditory stimuli."
-        ),
-        "damage_effects": (
-            "Damage may impair sound processing and auditory perception. "
-            "Because auditory information is represented bilaterally, "
-            "damage to one primary auditory cortex does not usually cause "
-            "complete deafness in one ear."
-        ),
-        "fact": (
-            "The auditory cortex contains an organized representation "
-            "of sound frequencies, known as tonotopy."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 9,
-    },
-    {
-        "name": "Cerebellum",
-        "slug": "cerebellum",
-        "category": "structure",
-        "color": "#14B8A6",
-        "location": (
-            "Located in the posterior cranial fossa, beneath the occipital "
-            "lobes and behind the brainstem. It consists of two hemispheres "
-            "connected by the central vermis."
-        ),
-        "function": (
-            "Coordinates movement, balance, posture, and motor learning. "
-            "It helps refine the timing, precision, and coordination of "
-            "movements. It also contributes to certain cognitive processes."
-        ),
-        "damage_effects": (
-            "Damage may cause ataxia, poor balance, uncoordinated movements, "
-            "intention tremor, abnormal eye movements, and difficulty "
-            "performing precise movements."
-        ),
-        "fact": (
-            "Although the cerebellum occupies a relatively small portion "
-            "of total brain volume, it contains a very large proportion "
-            "of the brain's neurons."
-        ),
-        "is_deep": False,
-        "is_midline": False,
-        "sort_order": 10,
-    },
-    {
-        "name": "Midbrain",
-        "slug": "midbrain",
-        "category": "structure",
-        "color": "#F59E0B",
-        "location": (
-            "The uppermost portion of the brainstem, located between "
-            "the diencephalon and the pons. It surrounds the cerebral "
-            "aqueduct."
-        ),
-        "function": (
-            "Involved in eye movements, visual and auditory reflexes, "
-            "motor control, alertness, and the regulation of movement. "
-            "It contains structures such as the substantia nigra "
-            "and red nucleus."
-        ),
-        "damage_effects": (
-            "Damage may cause abnormalities in eye movement, impaired "
-            "visual or auditory reflexes, movement disorders, weakness, "
-            "or disturbances in consciousness, depending on the affected area."
-        ),
-        "fact": (
-            "The substantia nigra, located in the midbrain, contains "
-            "dopamine-producing neurons that are significantly affected "
-            "in Parkinson's disease."
-        ),
-        "is_deep": True,
-        "is_midline": True,
-        "sort_order": 11,
-    },
-    {
-        "name": "Pons",
-        "slug": "pons",
-        "category": "structure",
-        "color": "#FB923C",
-        "location": (
-            "Located in the brainstem between the midbrain above and "
-            "the medulla oblongata below. It lies anterior to the cerebellum."
-        ),
-        "function": (
-            "Acts as an important communication pathway between the "
-            "cerebral cortex, cerebellum, and other brain regions. It also "
-            "contains nuclei involved in sleep, breathing, facial sensation, "
-            "facial movement, and eye movement."
-        ),
-        "damage_effects": (
-            "Damage may cause facial weakness, sensory disturbances, "
-            "abnormal eye movements, impaired coordination, breathing "
-            "disturbances, or severe paralysis in extensive injuries."
-        ),
-        "fact": (
-            "The name pons means bridge, reflecting its role in connecting "
-            "different parts of the nervous system."
-        ),
-        "is_deep": True,
-        "is_midline": True,
-        "sort_order": 12,
-    },
-    {
-        "name": "Medulla Oblongata",
-        "slug": "medulla-oblongata",
-        "category": "structure",
-        "color": "#DC2626",
-        "location": (
-            "The lowest portion of the brainstem, located between the pons "
-            "and the spinal cord. It lies anterior to the cerebellum."
-        ),
-        "function": (
-            "Contains neural centers and pathways involved in essential "
-            "autonomic functions, including regulation of breathing, "
-            "heart rate, blood pressure, swallowing, coughing, and vomiting."
-        ),
-        "damage_effects": (
-            "Severe damage may disrupt breathing, cardiovascular regulation, "
-            "swallowing, and other vital functions. Extensive injury can be "
-            "life-threatening."
-        ),
-        "fact": (
-            "Many motor pathways cross to the opposite side of the body "
-            "in the lower medulla at the pyramidal decussation."
-        ),
-        "is_deep": True,
-        "is_midline": True,
-        "sort_order": 13,
-    },
-    {
-        "name": "Corpus Callosum",
-        "slug": "corpus-callosum",
-        "category": "structure",
-        "color": "#E879F9",
-        "location": (
-            "A large C-shaped bundle of white matter located deep within "
-            "the brain, between the two cerebral hemispheres and above "
-            "the lateral ventricles."
-        ),
-        "function": (
-            "Connects the left and right cerebral hemispheres through "
-            "commissural nerve fibers, allowing information to be "
-            "communicated between corresponding and different cortical regions."
-        ),
-        "damage_effects": (
-            "Damage or disruption may interfere with communication between "
-            "the hemispheres. Some individuals may experience split-brain "
-            "effects, difficulty coordinating information across hemispheres, "
-            "or impaired interhemispheric transfer."
-        ),
-        "fact": (
-            "The corpus callosum is the largest commissural fiber tract "
-            "in the human brain."
-        ),
-        "is_deep": True,
-        "is_midline": True,
-        "sort_order": 14,
-    },
-    {
-        "name": "Thalamus",
-        "slug": "thalamus",
-        "category": "structure",
-        "color": "#8B5CF6",
-        "location": (
-            "Located deep within the diencephalon, on either side of "
-            "the third ventricle and above the hypothalamus."
-        ),
-        "function": (
-            "Acts as a major relay and processing center for sensory "
-            "information traveling to the cerebral cortex, with the "
-            "important exception of much olfactory information. It also "
-            "contributes to attention, consciousness, sleep, and motor circuits."
-        ),
-        "damage_effects": (
-            "Damage may cause sensory disturbances, altered consciousness, "
-            "memory difficulties, impaired attention, or thalamic pain "
-            "syndrome involving persistent abnormal sensations."
-        ),
-        "fact": (
-            "Nearly all sensory systems, except much of the olfactory system, "
-            "send information through thalamic nuclei before reaching "
-            "the cerebral cortex."
-        ),
-        "is_deep": True,
-        "is_midline": False,
-        "sort_order": 15,
-    },
-    {
-        "name": "Basal Ganglia",
-        "slug": "basal-ganglia",
-        "category": "structure",
-        "color": "#84CC16",
-        "location": (
-            "A group of interconnected subcortical nuclei located deep "
-            "within the cerebral hemispheres. Major components include "
-            "the caudate nucleus, putamen, and globus pallidus."
-        ),
-        "function": (
-            "Participates in the selection and initiation of actions, "
-            "movement regulation, habit formation, procedural learning, "
-            "and reward-related processes through interconnected neural circuits."
-        ),
-        "damage_effects": (
-            "Disorders involving basal ganglia circuits may produce "
-            "abnormal movements, including tremor, rigidity, slowed movement, "
-            "involuntary movements, and difficulties initiating or controlling "
-            "voluntary actions."
-        ),
-        "fact": (
-            "The basal ganglia are strongly associated with Parkinson's "
-            "disease and Huntington's disease, although these conditions "
-            "involve different underlying mechanisms."
-        ),
-        "is_deep": True,
-        "is_midline": False,
-        "sort_order": 16,
-    },
-    {
-        "name": "Hypothalamus",
-        "slug": "hypothalamus",
-        "category": "structure",
-        "color": "#EC4899",
-        "location": (
-            "Located below the thalamus and forms part of the floor "
-            "and lower walls of the third ventricle. It connects to "
-            "the pituitary gland through the infundibulum."
-        ),
-        "function": (
-            "Maintains homeostasis by regulating body temperature, hunger, "
-            "thirst, sleep-wake cycles, autonomic activity, stress responses, "
-            "and endocrine functions through its connection with the "
-            "pituitary gland."
-        ),
-        "damage_effects": (
-            "Damage may disrupt temperature regulation, appetite, thirst, "
-            "sleep, hormone regulation, reproductive functions, and "
-            "autonomic processes."
-        ),
-        "fact": (
-            "The hypothalamus helps coordinate the nervous system "
-            "and endocrine system, linking neural signals with hormonal "
-            "responses."
-        ),
-        "is_deep": True,
-        "is_midline": True,
-        "sort_order": 17,
-    },
-    {
-        "name": "Pituitary Gland",
-        "slug": "pituitary-gland",
-        "category": "structure",
-        "color": "#F472B6",
-        "location": (
-            "A small endocrine gland located beneath the hypothalamus "
-            "in the sella turcica of the sphenoid bone. It is connected "
-            "to the hypothalamus by the pituitary stalk."
-        ),
-        "function": (
-            "Secretes hormones that regulate growth, metabolism, reproduction, "
-            "lactation, and other endocrine functions. The anterior pituitary "
-            "produces several hormones, while the posterior pituitary releases "
-            "oxytocin and vasopressin produced by hypothalamic neurons."
-        ),
-        "damage_effects": (
-            "Damage or disease may cause hormone deficiencies or excesses, "
-            "growth disturbances, reproductive problems, changes in "
-            "metabolism, and disturbances in water balance."
-        ),
-        "fact": (
-            "The pituitary is often called the master gland, but its activity "
-            "is itself regulated by the hypothalamus and other feedback systems."
-        ),
-        "is_deep": True,
-        "is_midline": True,
-        "sort_order": 18,
-    },
-    {
-        "name": "Hippocampus",
-        "slug": "hippocampus",
-        "category": "structure",
-        "color": "#06D6A0",
-        "location": (
-            "A curved structure located in the medial temporal lobe "
-            "of each cerebral hemisphere, forming part of the hippocampal "
-            "formation."
-        ),
-        "function": (
-            "Essential for forming and consolidating many types of new "
-            "declarative memories. It also contributes to spatial memory, "
-            "navigation, and the organization of experiences."
-        ),
-        "damage_effects": (
-            "Damage may cause anterograde amnesia, involving difficulty "
-            "forming new long-term declarative memories. It may also impair "
-            "spatial navigation and certain forms of memory retrieval."
-        ),
-        "fact": (
-            "The hippocampus is named after its resemblance to a seahorse. "
-            "The name comes from the Greek words for horse and sea monster."
-        ),
-        "is_deep": True,
-        "is_midline": False,
-        "sort_order": 19,
-    },
-    {
-        "name": "Amygdala",
-        "slug": "amygdala",
-        "category": "structure",
-        "color": "#F43F5E",
-        "location": (
-            "An almond-shaped group of nuclei located deep within the "
-            "medial temporal lobe, near the anterior portion of the hippocampus."
-        ),
-        "function": (
-            "Contributes to processing emotional significance, especially "
-            "threat-related information, emotional learning, fear conditioning, "
-            "and the integration of emotion with memory."
-        ),
-        "damage_effects": (
-            "Damage may alter emotional learning, recognition of emotional "
-            "signals, and responses to threatening stimuli. Effects vary "
-            "depending on the affected nuclei and connected networks."
-        ),
-        "fact": (
-            "The word amygdala comes from the Greek word for almond, "
-            "describing its approximate shape."
-        ),
-        "is_deep": True,
-        "is_midline": False,
-        "sort_order": 20,
-    },
-]
+def seed(reset=False, write=print):
+    from django.apps import apps
+    from django.db import transaction
+
+    BrainPart = apps.get_model(APP_LABEL, "BrainPart")
+    with transaction.atomic():
+        if reset:
+            deleted, _ = BrainPart.objects.all().delete()
+            write(f"Deleted {deleted} existing rows")
+        created = updated = 0
+        for row in DATA:
+            _, was_created = BrainPart.objects.update_or_create(slug=row["slug"], defaults=row)
+            created += was_created
+            updated += not was_created
+    write(f"BrainPart seeded: {created} created, {updated} updated ({BrainPart.objects.count()} total)")
 
 
-class Command(BaseCommand):
-    help = "Populate the database with major human brain structures."
+try:  # mode A: loaded by manage.py
+    from django.core.management.base import BaseCommand
 
-    def handle(self, *args, **options):
-        created_count = 0
-        updated_count = 0
+    class Command(BaseCommand):
+        help = "Load the 235 brain parts into BrainPart."
 
-        for part_data in BRAIN_PARTS:
-            part, created = BrainPart.objects.update_or_create(
-                slug=part_data["slug"],
-                defaults={
-                    **part_data,
-                    "mesh_name": "",
-                },
-            )
+        def add_arguments(self, parser):
+            parser.add_argument("--reset", action="store_true", help="Delete existing rows first.")
 
-            if created:
-                created_count += 1
-                self.stdout.write(
-                    self.style.SUCCESS(f"Created: {part.name}")
-                )
-            else:
-                updated_count += 1
-                self.stdout.write(
-                    self.style.WARNING(f"Updated: {part.name}")
-                )
+        def handle(self, *args, **opts):
+            seed(opts["reset"], self.stdout.write)
+except ImportError:
+    pass
 
-        self.stdout.write("")
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Database seeding complete: "
-                f"{created_count} created, {updated_count} updated."
-            )
-        )
-        self.stdout.write(
-            f"Total brain structures in database: {BrainPart.objects.count()}"
-        )
+
+if __name__ == "__main__":  # mode B: python seed_brain.py
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", SETTINGS_MODULE)
+    import django
+
+    django.setup()
+    seed("--reset" in sys.argv)
