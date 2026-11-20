@@ -13,10 +13,6 @@ if (!container) {
     throw new Error("Could not find #brain-viewer.");
 }
 
-// =====================================================
-// SCENE
-// =====================================================
-
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#020617");
 
@@ -31,20 +27,9 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
-
-renderer.domElement.style.cssText = `
-    display: block;
-    width: 100%;
-    height: 100%;
-    touch-action: none;
-    outline: none;
-`;
+renderer.domElement.style.cssText = "display:block;width:100%;height:100%;touch-action:none;outline:none;";
 
 container.appendChild(renderer.domElement);
-
-// =====================================================
-// LIGHTING
-// =====================================================
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x777080, 2));
 
@@ -60,38 +45,31 @@ const rimLight = new THREE.DirectionalLight(0xc7d9ff, 1.3);
 rimLight.position.set(0, 5, -8);
 scene.add(rimLight);
 
-// =====================================================
-// ORBIT CONTROLS
-// =====================================================
-
 const controls = new OrbitControls(camera, renderer.domElement);
 
 controls.enableDamping = true;
-controls.dampingFactor = 0.06;
+controls.dampingFactor = 0.08;
 controls.enableRotate = true;
 controls.enableZoom = true;
 controls.enablePan = true;
-
-controls.zoomSpeed = 0.8;
-controls.zoomToCursor = true;
-controls.rotateSpeed = 0.7;
-controls.panSpeed = 0.7;
+controls.zoomSpeed = 0.65;
+controls.rotateSpeed = 0.55;
+controls.panSpeed = 0.55;
 controls.screenSpacePanning = true;
+controls.zoomToCursor = true;
+controls.minPolarAngle = 0.08;
+controls.maxPolarAngle = Math.PI - 0.08;
 
-controls.minDistance = 0.1;
-controls.maxDistance = 1000;
-
-controls.minPolarAngle = 0.1;
-controls.maxPolarAngle = Math.PI - 0.1;
+controls.mouseButtons = {
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.PAN
+};
 
 controls.touches = {
     ONE: THREE.TOUCH.ROTATE,
     TWO: THREE.TOUCH.DOLLY_PAN
 };
-
-// =====================================================
-// LOADERS
-// =====================================================
 
 const loader = new GLTFLoader();
 const dracoLoader = new DRACOLoader();
@@ -102,16 +80,10 @@ dracoLoader.setDecoderPath(
 
 loader.setDRACOLoader(dracoLoader);
 
-// =====================================================
-// STATE
-// =====================================================
-
 let brainRoot = null;
 let manifest = null;
-
 let modelRadius = 1;
 let selectedMeshes = new Set();
-
 let brainTransparency = 0;
 let focusAnimation = null;
 let pointerStart = null;
@@ -120,16 +92,11 @@ const meshMap = new Map();
 const originalMaterials = new Map();
 const visualMaterialCache = new Map();
 const corticalMeshes = new Set();
-
 const meshNameIndex = new Map();
 const groupIndex = new Map();
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
-
-// =====================================================
-// NAME UTILITIES
-// =====================================================
 
 function normalizeName(value) {
     return String(value ?? "")
@@ -163,10 +130,6 @@ function getSideCode(side) {
     return null;
 }
 
-// =====================================================
-// MATERIAL INITIALIZATION
-// =====================================================
-
 function prepareOriginalMaterials(root) {
     originalMaterials.clear();
 
@@ -180,16 +143,13 @@ function prepareOriginalMaterials(root) {
 
             material.side = THREE.DoubleSide;
 
-            if (material.color) {
-                const color = material.color;
-
-                if (
-                    color.r > 0.82 &&
-                    color.g > 0.82 &&
-                    color.b > 0.82
-                ) {
-                    color.set("#d1b9a8");
-                }
+            if (
+                material.color &&
+                material.color.r > 0.82 &&
+                material.color.g > 0.82 &&
+                material.color.b > 0.82
+            ) {
+                material.color.set("#d1b9a8");
             }
 
             if ("roughness" in material) {
@@ -204,10 +164,6 @@ function prepareOriginalMaterials(root) {
         }
     });
 }
-
-// =====================================================
-// SCENE INDEXES
-// =====================================================
 
 function buildSceneIndexes(root) {
     meshNameIndex.clear();
@@ -269,10 +225,6 @@ function belongsToExpectedSide(mesh, node, root) {
     );
 }
 
-// =====================================================
-// MANIFEST MAPPING
-// =====================================================
-
 function buildAnatomicalMapping(root, data) {
     meshMap.clear();
     corticalMeshes.clear();
@@ -313,14 +265,10 @@ function buildAnatomicalMapping(root, data) {
                 )
                 : [...candidates];
 
-            if (matches.length) {
-                hierarchyMatches++;
-            }
+            if (matches.length) hierarchyMatches++;
         }
 
-        if (!matches.length) {
-            missingStructures++;
-        }
+        if (!matches.length) missingStructures++;
 
         const entry = {
             id: node.id,
@@ -351,16 +299,11 @@ function buildAnatomicalMapping(root, data) {
 
     console.log("NEUROVERSE ANATOMICAL MAPPING");
     console.table([report]);
-    console.log("Full mapping report:", JSON.stringify(report, null, 2));
 
     window.brainMeshMap = meshMap;
 
     return report;
 }
-
-// =====================================================
-// STRUCTURE RESOLUTION
-// =====================================================
 
 function getPartNames(part) {
     if (typeof part === "string" || typeof part === "number") {
@@ -397,9 +340,7 @@ function resolvePartMeshes(part) {
         }
     }
 
-    if (resolved.size) {
-        return [...resolved];
-    }
+    if (resolved.size) return [...resolved];
 
     for (const key of keys) {
         (meshNameIndex.get(key) || []).forEach(mesh => {
@@ -407,9 +348,7 @@ function resolvePartMeshes(part) {
         });
     }
 
-    if (resolved.size) {
-        return [...resolved];
-    }
+    if (resolved.size) return [...resolved];
 
     for (const key of keys) {
         for (const group of groupIndex.get(key) || []) {
@@ -421,10 +360,6 @@ function resolvePartMeshes(part) {
 
     return [...resolved];
 }
-
-// =====================================================
-// TRANSPARENCY MATERIAL CACHE
-// =====================================================
 
 function createMaterialVariants(original) {
     const transparent = original.clone();
@@ -448,10 +383,7 @@ function createMaterialVariants(original) {
     highlight.opacity = 1;
     highlight.depthWrite = true;
 
-    return {
-        transparent,
-        highlight
-    };
+    return { transparent, highlight };
 }
 
 function getVisualMaterials(mesh) {
@@ -472,10 +404,6 @@ function getVisualMaterials(mesh) {
     return variants;
 }
 
-// =====================================================
-// APPLY VISUAL APPEARANCE
-// =====================================================
-
 function applyVisualAppearance() {
     if (!brainRoot) return;
 
@@ -486,7 +414,6 @@ function applyVisualAppearance() {
 
         if (!original) return;
 
-        // Selected structures always remain highlighted.
         if (selectedMeshes.has(mesh)) {
             const variants = getVisualMaterials(mesh);
 
@@ -499,11 +426,7 @@ function applyVisualAppearance() {
             return;
         }
 
-        // Transparency affects mapped cortical meshes only.
-        if (
-            corticalMeshes.has(mesh) &&
-            brainTransparency > 0
-        ) {
+        if (corticalMeshes.has(mesh) && brainTransparency > 0) {
             const variants = getVisualMaterials(mesh);
 
             if (!variants) return;
@@ -513,30 +436,25 @@ function applyVisualAppearance() {
                 1 - (brainTransparency / 100) * 0.97
             );
 
-            const transparentMaterials = Array.isArray(variants)
+            const materials = Array.isArray(variants)
                 ? variants.map(item => item.transparent)
                 : [variants.transparent];
 
-            transparentMaterials.forEach(material => {
+            materials.forEach(material => {
                 material.opacity = opacity;
                 material.needsUpdate = true;
             });
 
             mesh.material = Array.isArray(variants)
-                ? transparentMaterials
-                : transparentMaterials[0];
+                ? materials
+                : materials[0];
 
             return;
         }
 
-        // Restore original material when not selected or faded.
         mesh.material = original;
     });
 }
-
-// =====================================================
-// TRANSPARENCY API
-// =====================================================
 
 function setTransparency(value) {
     const numericValue = Number(value);
@@ -545,19 +463,13 @@ function setTransparency(value) {
         return brainTransparency;
     }
 
-    brainTransparency = THREE.MathUtils.clamp(
-        numericValue,
-        0,
-        100
-    );
+    brainTransparency = THREE.MathUtils.clamp(numericValue, 0, 100);
 
     applyVisualAppearance();
 
     window.dispatchEvent(
         new CustomEvent("brainviewer:transparency-changed", {
-            detail: {
-                value: brainTransparency
-            }
+            detail: { value: brainTransparency }
         })
     );
 
@@ -567,10 +479,6 @@ function setTransparency(value) {
 function getTransparency() {
     return brainTransparency;
 }
-
-// =====================================================
-// SELECTION AND HIGHLIGHTING
-// =====================================================
 
 function highlightMeshes(meshes) {
     selectedMeshes = new Set(meshes || []);
@@ -597,15 +505,35 @@ function clearSelection() {
     applyVisualAppearance();
 }
 
-// =====================================================
-// CAMERA FOCUS
-// =====================================================
+function getCameraDistance(radius, multiplier = 2.2) {
+    const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+
+    const horizontalFov = 2 * Math.atan(
+        Math.tan(verticalFov / 2) * camera.aspect
+    );
+
+    const effectiveFov = Math.min(verticalFov, horizontalFov);
+
+    return (radius / Math.sin(effectiveFov / 2)) * multiplier;
+}
+
+function animateCameraTo(center, direction, distance, up = camera.up) {
+    focusAnimation = {
+        startCamera: camera.position.clone(),
+        startTarget: controls.target.clone(),
+        startUp: camera.up.clone(),
+        endCamera: center.clone().add(
+            direction.clone().normalize().multiplyScalar(distance)
+        ),
+        endTarget: center.clone(),
+        endUp: up.clone().normalize(),
+        elapsed: 0,
+        duration: 0.9
+    };
+}
 
 function focusPart(part) {
-    if (!brainRoot) {
-        console.warn("Brain model is not ready.");
-        return false;
-    }
+    if (!brainRoot) return false;
 
     const meshes = resolvePartMeshes(part);
 
@@ -628,48 +556,21 @@ function focusPart(part) {
     const center = bounds.getCenter(new THREE.Vector3());
     const sphere = bounds.getBoundingSphere(new THREE.Sphere());
 
-    const radius = Math.max(
-        sphere.radius,
-        modelRadius * 0.015
-    );
+    const radius = Math.max(sphere.radius, modelRadius * 0.012);
 
-    const direction = camera.position
-        .clone()
-        .sub(controls.target)
-        .normalize();
+    let direction = camera.position.clone().sub(controls.target);
 
     if (direction.lengthSq() < 0.001) {
         direction.set(0, 0, 1);
     }
 
-    const verticalFov = THREE.MathUtils.degToRad(camera.fov);
-
-    const horizontalFov = 2 * Math.atan(
-        Math.tan(verticalFov / 2) * camera.aspect
-    );
-
-    const effectiveFov = Math.min(verticalFov, horizontalFov);
-
     const distance = THREE.MathUtils.clamp(
-        (radius / Math.sin(effectiveFov / 2)) * 2.2,
+        getCameraDistance(radius, 2.3),
         modelRadius * 0.12,
-        modelRadius * 12
+        modelRadius * 8
     );
 
-    const destination = center.clone().add(
-        direction.multiplyScalar(distance)
-    );
-
-    focusAnimation = {
-        startCamera: camera.position.clone(),
-        startTarget: controls.target.clone(),
-        endCamera: destination,
-        endTarget: center.clone(),
-        elapsed: 0,
-        duration: 1.2
-    };
-
-    console.log("Focusing on:", part.name || part.label);
+    animateCameraTo(center, direction, distance);
 
     return true;
 }
@@ -700,16 +601,21 @@ function updateFocusAnimation(deltaTime) {
         eased
     );
 
+    camera.up.lerpVectors(
+        animation.startUp,
+        animation.endUp,
+        eased
+    ).normalize();
+
     if (progress >= 1) {
         camera.position.copy(animation.endCamera);
         controls.target.copy(animation.endTarget);
+        camera.up.copy(animation.endUp);
         focusAnimation = null;
     }
-}
 
-// =====================================================
-// CAMERA RESET AND MODEL FITTING
-// =====================================================
+    controls.update();
+}
 
 function fitCameraToBrain(root) {
     root.updateMatrixWorld(true);
@@ -725,56 +631,100 @@ function fitCameraToBrain(root) {
 
     modelRadius = Math.max(sphere.radius, 0.01);
 
-    const verticalFov = THREE.MathUtils.degToRad(camera.fov);
-
-    const horizontalFov = 2 * Math.atan(
-        Math.tan(verticalFov / 2) * camera.aspect
-    );
-
-    const distance =
-        (modelRadius / Math.sin(Math.min(verticalFov, horizontalFov) / 2))
-        * 1.35;
-
     const target = center.clone();
-    target.y += modelRadius * 0.16;
+    target.y += modelRadius * 0.12;
 
-    camera.position.set(
-        target.x,
-        target.y,
-        target.z + distance
-    );
+    const distance = getCameraDistance(modelRadius, 1.45);
+
+    camera.up.set(0, 1, 0);
+    camera.position.copy(target).add(new THREE.Vector3(0, 0, distance));
 
     camera.near = Math.max(distance / 1000, 0.001);
-    camera.far = distance * 100;
+    camera.far = distance * 50;
     camera.updateProjectionMatrix();
 
     controls.target.copy(target);
-
-    controls.minDistance = modelRadius * 0.2;
-    controls.maxDistance = modelRadius * 15;
+    controls.minDistance = modelRadius * 0.08;
+    controls.maxDistance = modelRadius * 8;
 
     controls.update();
 }
 
 function resetView() {
-    focusAnimation = null;
+    if (!brainRoot) return;
 
-    if (brainRoot) {
-        fitCameraToBrain(brainRoot);
-    }
+    focusAnimation = null;
+    fitCameraToBrain(brainRoot);
+    updateActiveCameraButton("side");
 }
 
-// =====================================================
-// LOAD MANIFEST
-// =====================================================
+function setCameraView(view) {
+    if (!brainRoot) return;
+
+    const directions = {
+        side: new THREE.Vector3(0, 0, 1),
+        front: new THREE.Vector3(1, 0, 0),
+        top: new THREE.Vector3(0, 1, 0),
+        back: new THREE.Vector3(0, 0, -1)
+    };
+
+    const direction = directions[view];
+
+    if (!direction) return;
+
+    const center = controls.target.clone();
+    const distance = Math.max(
+        camera.position.distanceTo(center),
+        modelRadius * 1.5
+    );
+
+    const up = view === "top"
+        ? new THREE.Vector3(0, 0, -1)
+        : new THREE.Vector3(0, 1, 0);
+
+    animateCameraTo(center, direction, distance, up);
+    updateActiveCameraButton(view);
+}
+
+function updateActiveCameraButton(view) {
+    document.querySelectorAll("[data-camera-view]").forEach(button => {
+        const active = button.dataset.cameraView === view;
+
+        button.classList.toggle("border-cyan-500", active);
+        button.classList.toggle("bg-cyan-500/15", active);
+        button.classList.toggle("text-cyan-300", active);
+
+        button.classList.toggle("border-slate-700", !active);
+        button.classList.toggle("bg-slate-800", !active);
+        button.classList.toggle("text-slate-300", !active);
+    });
+}
+
+function zoomCamera(factor) {
+    if (!brainRoot) return;
+
+    focusAnimation = null;
+
+    const offset = camera.position.clone().sub(controls.target);
+    const currentDistance = offset.length();
+
+    const nextDistance = THREE.MathUtils.clamp(
+        currentDistance * factor,
+        controls.minDistance,
+        controls.maxDistance
+    );
+
+    offset.setLength(nextDistance);
+    camera.position.copy(controls.target).add(offset);
+
+    controls.update();
+}
 
 async function loadManifest() {
     const response = await fetch(MANIFEST_URL);
 
     if (!response.ok) {
-        throw new Error(
-            `Manifest request failed: ${response.status}`
-        );
+        throw new Error(`Manifest request failed: ${response.status}`);
     }
 
     const data = await response.json();
@@ -786,17 +736,10 @@ async function loadManifest() {
     return data;
 }
 
-// =====================================================
-// LOAD BRAIN MODEL
-// =====================================================
-
 loader.load(
     MODEL_URL,
-
     async gltf => {
         try {
-            console.log("Brain GLB loaded.");
-
             const model = gltf.scene;
             let meshCount = 0;
 
@@ -814,11 +757,7 @@ loader.load(
             const initialBounds = new THREE.Box3().setFromObject(brainRoot);
             const size = initialBounds.getSize(new THREE.Vector3());
 
-            const maxDimension = Math.max(
-                size.x,
-                size.y,
-                size.z
-            );
+            const maxDimension = Math.max(size.x, size.y, size.z);
 
             if (!Number.isFinite(maxDimension) || maxDimension <= 0) {
                 throw new Error("Invalid model dimensions.");
@@ -841,26 +780,19 @@ loader.load(
 
             manifest = await loadManifest();
 
-            const report = buildAnatomicalMapping(
-                brainRoot,
-                manifest
-            );
+            const report = buildAnatomicalMapping(brainRoot, manifest);
 
             applyVisualAppearance();
-
-            console.log("Brain viewer ready.");
 
             window.dispatchEvent(
                 new CustomEvent("brainviewer:ready", {
                     detail: report
                 })
             );
-
         } catch (error) {
             console.error("Brain initialization error:", error);
         }
     },
-
     progress => {
         if (progress.total > 0) {
             const percent = (
@@ -870,15 +802,10 @@ loader.load(
             console.log(`Loading brain: ${percent}%`);
         }
     },
-
     error => {
         console.error("Could not load brain GLB:", error);
     }
 );
-
-// =====================================================
-// PUBLIC API
-// =====================================================
 
 window.brainViewer = {
     highlightPart,
@@ -891,6 +818,10 @@ window.brainViewer = {
 
     setTransparency,
     getTransparency,
+
+    setCameraView,
+    zoomIn: () => zoomCamera(0.82),
+    zoomOut: () => zoomCamera(1.22),
 
     getPartMeshes: resolvePartMeshes,
     getMapping: () => meshMap,
@@ -944,28 +875,29 @@ window.brainViewer = {
         });
     },
 
-    resetView,
-
-    zoomIn() {
-        camera.position.sub(controls.target)
-            .multiplyScalar(0.85)
-            .add(controls.target);
-
-        controls.update();
-    },
-
-    zoomOut() {
-        camera.position.sub(controls.target)
-            .multiplyScalar(1.18)
-            .add(controls.target);
-
-        controls.update();
-    }
+    resetView
 };
 
-// =====================================================
-// CLICK 3D BRAIN TO SELECT STRUCTURE
-// =====================================================
+document.querySelectorAll("[data-camera-view]").forEach(button => {
+    button.addEventListener("click", () => {
+        setCameraView(button.dataset.cameraView);
+    });
+});
+
+document.querySelectorAll("[data-camera-action]").forEach(button => {
+    button.addEventListener("click", () => {
+        const action = button.dataset.cameraAction;
+
+        if (action === "zoom-in") zoomCamera(0.82);
+        if (action === "zoom-out") zoomCamera(1.22);
+    });
+});
+
+const resetButton = document.getElementById("reset-brain-view");
+
+if (resetButton) {
+    resetButton.addEventListener("click", resetView);
+}
 
 renderer.domElement.addEventListener("pointerdown", event => {
     pointerStart = {
@@ -991,13 +923,8 @@ renderer.domElement.addEventListener("pointerup", event => {
 
     const rect = renderer.domElement.getBoundingClientRect();
 
-    pointer.x = (
-        (event.clientX - rect.left) / rect.width
-    ) * 2 - 1;
-
-    pointer.y = -(
-        (event.clientY - rect.top) / rect.height
-    ) * 2 + 1;
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
     raycaster.setFromCamera(pointer, camera);
 
@@ -1011,13 +938,7 @@ renderer.domElement.addEventListener("pointerup", event => {
         item.meshes.includes(clickedMesh)
     );
 
-    if (!entry) {
-        console.warn(
-            "Clicked mesh has no manifest mapping:",
-            clickedMesh.name
-        );
-        return;
-    }
+    if (!entry) return;
 
     highlightMeshes(entry.meshes);
 
@@ -1027,10 +948,6 @@ renderer.domElement.addEventListener("pointerup", event => {
         })
     );
 });
-
-// =====================================================
-// RESPONSIVE RESIZE
-// =====================================================
 
 function resizeViewer() {
     const width = container.clientWidth;
@@ -1048,10 +965,6 @@ const resizeObserver = new ResizeObserver(resizeViewer);
 resizeObserver.observe(container);
 
 resizeViewer();
-
-// =====================================================
-// CLEANUP
-// =====================================================
 
 window.addEventListener("beforeunload", () => {
     resizeObserver.disconnect();
@@ -1075,10 +988,6 @@ window.addEventListener("beforeunload", () => {
     visualMaterialCache.clear();
     renderer.dispose();
 });
-
-// =====================================================
-// ANIMATION LOOP
-// =====================================================
 
 const clock = new THREE.Clock();
 
