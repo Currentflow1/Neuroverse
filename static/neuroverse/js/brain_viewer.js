@@ -45,28 +45,37 @@ const rimLight = new THREE.DirectionalLight(0xc7d9ff, 1.3);
 rimLight.position.set(0, 5, -8);
 scene.add(rimLight);
 
+
 const controls = new OrbitControls(camera, renderer.domElement);
 
 controls.enableDamping = true;
-controls.dampingFactor = 0.08;
-controls.enableRotate = false;
+controls.dampingFactor = 0.07;
+
+controls.enableRotate = true;
 controls.enablePan = true;
 controls.enableZoom = true;
+
+controls.rotateSpeed = 0.65;
 controls.panSpeed = 0.8;
 controls.zoomSpeed = 0.8;
+
 controls.screenSpacePanning = true;
 controls.zoomToCursor = true;
 
+controls.minPolarAngle = 0.05;
+controls.maxPolarAngle = Math.PI - 0.05;
+
 controls.mouseButtons = {
-    LEFT: THREE.MOUSE.PAN,
-    MIDDLE: THREE.MOUSE.DOLLY,
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.PAN,
     RIGHT: THREE.MOUSE.PAN
 };
 
 controls.touches = {
-    ONE: THREE.TOUCH.PAN,
+    ONE: THREE.TOUCH.ROTATE,
     TWO: THREE.TOUCH.DOLLY_PAN
 };
+
 
 const loader = new GLTFLoader();
 const dracoLoader = new DRACOLoader();
