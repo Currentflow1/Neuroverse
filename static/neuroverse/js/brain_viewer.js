@@ -49,25 +49,22 @@ const controls = new OrbitControls(camera, renderer.domElement);
 
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.enableRotate = true;
-controls.enableZoom = true;
+controls.enableRotate = false;
 controls.enablePan = true;
-controls.zoomSpeed = 0.65;
-controls.rotateSpeed = 0.55;
-controls.panSpeed = 0.55;
+controls.enableZoom = true;
+controls.panSpeed = 0.8;
+controls.zoomSpeed = 0.8;
 controls.screenSpacePanning = true;
 controls.zoomToCursor = true;
-controls.minPolarAngle = 0.08;
-controls.maxPolarAngle = Math.PI - 0.08;
 
 controls.mouseButtons = {
-    LEFT: THREE.MOUSE.ROTATE,
+    LEFT: THREE.MOUSE.PAN,
     MIDDLE: THREE.MOUSE.DOLLY,
     RIGHT: THREE.MOUSE.PAN
 };
 
 controls.touches = {
-    ONE: THREE.TOUCH.ROTATE,
+    ONE: THREE.TOUCH.PAN,
     TWO: THREE.TOUCH.DOLLY_PAN
 };
 
