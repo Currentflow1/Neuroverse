@@ -1,0 +1,46 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{% block title %}Neuroverse{% endblock %}</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+        }
+    }
+    </script>
+
+
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body class="bg-slate-950 text-white min-h-screen">
+
+    <nav class="border-b border-slate-800 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="text-2xl font-bold tracking-wide">
+                NEURO<span class="text-cyan-400">VERSE</span>
+            </a>
+
+            <span class="text-lg text-slate-400">
+                By Leonard The Great
+            </span>
+        </div>
+    </nav>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_js %}{% endblock %}
+
+</body>
+</html>
